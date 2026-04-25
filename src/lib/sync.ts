@@ -152,6 +152,19 @@ async function normalizeLocalIds(caregiverId?: string) {
   });
 }
 
+async function normalizeLocalCaregiverOwnership(caregiverId: string): Promise<void> {
+  const patients = await db.patients.toArray();
+  if (patients.length === 0) return;
+
+  const matchingPatients = patients.filter((patient) => patient.caregiver_id === caregiverId);
+  if (matchingPatients.length > 0) return;
+
+  // After a cloud reset + local backup import, local patients can still carry an old
+  // caregiver UUID that no longer exists remotely. Rebind them to the active caregiver
+  // so the patients FK remains valid during the next sync.
+  await db.patients.toCollection().modify({ caregiver_id: caregiverId });
+}
+
 // Pull all data from Supabase and hydrate local Dexie
 export async function pullFromCloud(caregiverId: string): Promise<{ patients: number; medications: number; logs: number; error?: string }> {
   if (!hasSupabaseKeys) return { patients: 0, medications: 0, logs: 0, error: 'Supabase keys missing' };
@@ -255,6 +268,9 @@ export async function pushToCloud(caregiverId?: string): Promise<{ patients: num
   
   try {
     await normalizeLocalIds(caregiverId);
+    if (caregiverId) {
+      await normalizeLocalCaregiverOwnership(caregiverId);
+    }
 
     let patients = await db.patients.toArray();
     let medications = await db.medications.toArray();

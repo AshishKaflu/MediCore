@@ -21,8 +21,48 @@ type SyncSummary = {
   error?: string;
 };
 
+const PATIENT_BATCH_SIZE = 50;
+const MEDICATION_BATCH_SIZE = 25;
+const LOG_BATCH_SIZE = 100;
+
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+function chunkArray<T>(items: T[], size: number): T[][];
+function chunkArray<T>(items: T[], size: number): T[][] {
+  if (size <= 0) return [items];
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
+async function upsertInBatches<T extends Record<string, unknown>>(
+  table: 'patients' | 'medications' | 'medication_logs',
+  rows: T[],
+  batchSize: number
+) {
+  for (const batch of chunkArray(rows, batchSize)) {
+    const { error } = await supabase.from(table).upsert(batch);
+    if (error) throw error;
+  }
+}
+
+async function selectByIdsInBatches<T>(
+  table: 'medications' | 'medication_logs',
+  column: 'patient_id' | 'medication_id',
+  ids: string[],
+  batchSize: number
+): Promise<T[]> {
+  const results: T[] = [];
+  for (const batch of chunkArray(ids, batchSize)) {
+    const { data, error } = await supabase.from(table).select('*').in(column, batch);
+    if (error) throw error;
+    if (data && data.length > 0) results.push(...(data as T[]));
+  }
+  return results;
+}
 
 async function normalizeLocalIds(caregiverId?: string) {
   // Supabase uses UUID columns; if local IDs are not UUID-shaped, sync will fail.
@@ -103,11 +143,12 @@ export async function pullFromCloud(caregiverId: string): Promise<{ patients: nu
     let medicationCount = 0;
     let logCount = 0;
     if (tempPatientIds.length > 0) {
-      const { data: medications, error: mErr } = await supabase
-        .from('medications')
-        .select('*')
-        .in('patient_id', tempPatientIds);
-      if (mErr) throw mErr;
+      const medications = await selectByIdsInBatches<any>(
+        'medications',
+        'patient_id',
+        tempPatientIds,
+        MEDICATION_BATCH_SIZE
+      );
       if (medications && medications.length > 0) {
          medicationCount = medications.length;
          await db.medications.bulkPut(medications);
@@ -116,11 +157,12 @@ export async function pullFromCloud(caregiverId: string): Promise<{ patients: nu
       // 3. Pull Logs
       const tempMedIds = medications?.map(m => m.id) || [];
       if (tempMedIds.length > 0) {
-          const { data: logs, error: lErr } = await supabase
-             .from('medication_logs')
-             .select('*')
-             .in('medication_id', tempMedIds);
-          if (lErr) throw lErr;
+          const logs = await selectByIdsInBatches<any>(
+            'medication_logs',
+            'medication_id',
+            tempMedIds,
+            LOG_BATCH_SIZE
+          );
           if (logs && logs.length > 0) {
               logCount = logs.length;
               await db.medication_logs.bulkPut(logs);
@@ -205,20 +247,17 @@ export async function pushToCloud(caregiverId?: string): Promise<{ patients: num
 
     // Upsert Patients
     if (patients.length > 0) {
-      const { error } = await supabase.from('patients').upsert(patients);
-      if (error) throw error;
+      await upsertInBatches('patients', patients, PATIENT_BATCH_SIZE);
     }
 
     // Upsert Medications
     if (medications.length > 0) {
-      const { error } = await supabase.from('medications').upsert(medications);
-      if (error) throw error;
+      await upsertInBatches('medications', medications, MEDICATION_BATCH_SIZE);
     }
 
     // Upsert Logs
     if (logs.length > 0) {
-      const { error } = await supabase.from('medication_logs').upsert(logs);
-      if (error) throw error;
+      await upsertInBatches('medication_logs', logs, LOG_BATCH_SIZE);
     }
 
     return { patients: patients.length, medications: medications.length, logs: logs.length };

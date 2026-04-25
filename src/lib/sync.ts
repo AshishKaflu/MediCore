@@ -21,9 +21,9 @@ type SyncSummary = {
   error?: string;
 };
 
-const PATIENT_BATCH_SIZE = 50;
-const MEDICATION_BATCH_SIZE = 25;
-const LOG_BATCH_SIZE = 100;
+const PATIENT_BATCH_SIZE = 20;
+const MEDICATION_BATCH_SIZE = 5;
+const LOG_BATCH_SIZE = 25;
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -38,14 +38,43 @@ function chunkArray<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
+function isStatementTimeoutError(error: unknown): boolean {
+  const message =
+    typeof error === 'object' && error !== null && 'message' in error
+      ? String((error as { message?: unknown }).message || '')
+      : '';
+  return message.toLowerCase().includes('statement timeout');
+}
+
+async function runBatchWithAdaptiveSplit<T>(
+  items: T[],
+  runner: (batch: T[]) => Promise<void>
+): Promise<void> {
+  if (items.length === 0) return;
+
+  try {
+    await runner(items);
+  } catch (error) {
+    if (!isStatementTimeoutError(error) || items.length === 1) {
+      throw error;
+    }
+
+    const midpoint = Math.ceil(items.length / 2);
+    await runBatchWithAdaptiveSplit(items.slice(0, midpoint), runner);
+    await runBatchWithAdaptiveSplit(items.slice(midpoint), runner);
+  }
+}
+
 async function upsertInBatches<T extends Record<string, unknown>>(
   table: 'patients' | 'medications' | 'medication_logs',
   rows: T[],
   batchSize: number
 ) {
   for (const batch of chunkArray(rows, batchSize)) {
-    const { error } = await supabase.from(table).upsert(batch);
-    if (error) throw error;
+    await runBatchWithAdaptiveSplit(batch, async (safeBatch) => {
+      const { error } = await supabase.from(table).upsert(safeBatch);
+      if (error) throw error;
+    });
   }
 }
 
@@ -57,9 +86,11 @@ async function selectByIdsInBatches<T>(
 ): Promise<T[]> {
   const results: T[] = [];
   for (const batch of chunkArray(ids, batchSize)) {
-    const { data, error } = await supabase.from(table).select('*').in(column, batch);
-    if (error) throw error;
-    if (data && data.length > 0) results.push(...(data as T[]));
+    await runBatchWithAdaptiveSplit(batch, async (safeBatch) => {
+      const { data, error } = await supabase.from(table).select('*').in(column, safeBatch);
+      if (error) throw error;
+      if (data && data.length > 0) results.push(...(data as T[]));
+    });
   }
   return results;
 }

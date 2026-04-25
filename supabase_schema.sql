@@ -67,6 +67,14 @@ CREATE TABLE IF NOT EXISTS public.patients (
   pin TEXT,
   designation TEXT DEFAULT '',
   photo TEXT,
+  allergies TEXT,
+  emergency_notes TEXT,
+  timezone TEXT,
+  photo_url TEXT,
+  pin_enabled BOOLEAN,
+  pin_hash TEXT,
+  date_of_birth TEXT,
+  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -79,6 +87,14 @@ ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS pin TEXT;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT '';
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS photo TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS allergies TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS emergency_notes TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS timezone TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS photo_url TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS pin_enabled BOOLEAN;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS pin_hash TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
+ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 
 -- Migrate any leftover legacy column into the canonical caregiver_id.
@@ -127,11 +143,21 @@ CREATE TABLE IF NOT EXISTS public.medications (
   dosage TEXT NOT NULL DEFAULT '',
   frequency TEXT DEFAULT '',
   type TEXT,
+  form TEXT,
   timing TEXT,
   interval TEXT,
   interval_days INTEGER,
   start_date TEXT,
   photo TEXT,
+  prn BOOLEAN,
+  generic_name TEXT,
+  condition_reason TEXT,
+  strength_value TEXT,
+  strength_unit TEXT,
+  created_by UUID,
+  updated_by UUID,
+  updated_at TIMESTAMPTZ,
+  photo_url TEXT,
   inventory_count INTEGER NOT NULL DEFAULT 0,
   refill_reminder_at INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -142,11 +168,21 @@ ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS name TEXT DEFAULT '';
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS dosage TEXT DEFAULT '';
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS frequency TEXT DEFAULT '';
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS form TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS timing TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS interval TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS interval_days INTEGER;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS start_date TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS photo TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS prn BOOLEAN;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS generic_name TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS condition_reason TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS strength_value TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS strength_unit TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS created_by UUID;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS updated_by UUID;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS photo_url TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS inventory_count INTEGER DEFAULT 0;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS refill_reminder_at INTEGER DEFAULT 0;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();

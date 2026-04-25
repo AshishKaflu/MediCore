@@ -94,7 +94,7 @@ export default function Settings() {
     try {
       let finalPhoto = user.photo;
       if (photoFile) {
-        finalPhoto = await uploadImageToStorage(photoFile, 'patients');
+        finalPhoto = await uploadImageToStorage(photoFile, 'caregivers');
       }
 
       const { error } = await supabase

@@ -2,13 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
-import { Settings as SettingsIcon, Plus, AlertCircle, Activity, Users, Pill, Edit2, Archive, Trash2, ChevronRight } from 'lucide-react';
+import { Settings as SettingsIcon, Plus, AlertCircle, Activity, Users, Pill, Edit2, Archive, Trash2, ChevronRight, RotateCcw } from 'lucide-react';
 import { db } from '../lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer, XAxis, Tooltip, CartesianGrid } from 'recharts';
 import { toast } from 'sonner';
-import { deletePatientCloud, refreshCaregiverData, scheduleCaregiverSync } from '../lib/sync';
+import { deletePatientCloud, refreshCaregiverData, scheduleCaregiverSync, syncCaregiverNow } from '../lib/sync';
 import { generateId } from '../lib/id';
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, isSameDay, parseISO, subDays } from 'date-fns';
 
@@ -19,6 +19,7 @@ export default function CaregiverDashboard() {
   const caregiverId = user?.id || '';
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
   const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
 
   // Keep this device in sync with Supabase without requiring re-login.
   useEffect(() => {
@@ -239,6 +240,28 @@ export default function CaregiverDashboard() {
     deletePatientCloud(id, caregiverId);
   };
 
+  const handleManualSync = async () => {
+    if (!caregiverId || isSyncingNow) return;
+
+    try {
+      setIsSyncingNow(true);
+      const res = await syncCaregiverNow(caregiverId);
+      if (res.error) {
+        toast.error(`Sync failed: ${res.error}`);
+        return;
+      }
+
+      toast.success(
+        `Sync complete: ${res.patients} patients, ${res.medications} medications, ${res.logs} logs.`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown sync error';
+      toast.error(`Sync failed: ${message}`);
+    } finally {
+      setIsSyncingNow(false);
+    }
+  };
+
   // Derive some realistic looking mock stats based on patient count
   const stats = useMemo(() => {
     return {
@@ -258,6 +281,15 @@ export default function CaregiverDashboard() {
             <p className="text-[11px] text-[#606C38] opacity-60 font-semibold mt-1">Updates sync automatically in the background.</p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleManualSync}
+              disabled={isSyncingNow}
+              className="h-10 px-3 bg-white border border-[#E5E1D8] shadow-sm rounded-full flex items-center justify-center gap-2 hover:bg-[#E5E1D8] transition text-[#606C38] disabled:opacity-60 disabled:cursor-not-allowed"
+              title="Sync now"
+            >
+              <RotateCcw className={`w-4 h-4 ${isSyncingNow ? 'animate-spin' : ''}`} />
+              <span className="text-xs font-bold">{isSyncingNow ? 'Syncing' : 'Sync now'}</span>
+            </button>
             <button 
               onClick={() => navigate('/settings')}
               className="w-10 h-10 bg-white border border-[#E5E1D8] shadow-sm rounded-full flex items-center justify-center hover:bg-[#E5E1D8] transition text-[#606C38]"

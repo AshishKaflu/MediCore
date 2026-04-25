@@ -14,6 +14,13 @@ let patientSyncInFlight: Promise<void> | null = null;
 let caregiverSyncQueued = false;
 let patientSyncQueued = false;
 
+type SyncSummary = {
+  patients: number;
+  medications: number;
+  logs: number;
+  error?: string;
+};
+
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
@@ -261,6 +268,56 @@ export async function refreshPatientData(patientId: string) {
   return pullPatientFromCloud(patientId);
 }
 
+async function runCaregiverSync(caregiverId: string): Promise<SyncSummary> {
+  const pushRes = await pushToCloud(caregiverId);
+  if (pushRes.error) return pushRes;
+
+  const pullRes = await pullFromCloud(caregiverId);
+  if (pullRes.error) return pullRes;
+
+  return {
+    patients: pullRes.patients,
+    medications: pullRes.medications,
+    logs: pullRes.logs,
+  };
+}
+
+export async function syncCaregiverNow(caregiverId: string): Promise<SyncSummary> {
+  if (!caregiverId) {
+    return { patients: 0, medications: 0, logs: 0, error: 'Missing caregiver id' };
+  }
+  if (!hasSupabaseKeys) {
+    return { patients: 0, medications: 0, logs: 0, error: 'Supabase keys missing' };
+  }
+
+  if (caregiverSyncTimer) {
+    clearTimeout(caregiverSyncTimer);
+    caregiverSyncTimer = null;
+  }
+
+  if (caregiverSyncInFlight) {
+    caregiverSyncQueued = true;
+    await caregiverSyncInFlight;
+    if (!caregiverSyncQueued) {
+      return { patients: 0, medications: 0, logs: 0 };
+    }
+  }
+
+  caregiverSyncQueued = false;
+  const syncPromise = runCaregiverSync(caregiverId);
+  caregiverSyncInFlight = syncPromise.then(() => undefined);
+
+  try {
+    return await syncPromise;
+  } finally {
+    caregiverSyncInFlight = null;
+    if (caregiverSyncQueued) {
+      caregiverSyncQueued = false;
+      scheduleCaregiverSync(caregiverId, 150);
+    }
+  }
+}
+
 export function scheduleCaregiverSync(caregiverId: string, delayMs = 500) {
   if (!caregiverId || !hasSupabaseKeys) return;
   if (caregiverSyncTimer) clearTimeout(caregiverSyncTimer);
@@ -274,12 +331,11 @@ export function scheduleCaregiverSync(caregiverId: string, delayMs = 500) {
 
     caregiverSyncInFlight = (async () => {
       try {
-        const pushRes = await pushToCloud(caregiverId);
-        if (pushRes.error) {
-          console.error('Caregiver sync push failed', pushRes.error);
+        const res = await runCaregiverSync(caregiverId);
+        if (res.error) {
+          console.error('Caregiver sync failed', res.error);
           return;
         }
-        await pullFromCloud(caregiverId);
       } finally {
         caregiverSyncInFlight = null;
         if (caregiverSyncQueued) {

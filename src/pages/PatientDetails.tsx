@@ -8,6 +8,7 @@ import { useAuthStore } from '../store/authStore';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { format } from 'date-fns';
 import { deletePatientCloud, scheduleCaregiverSync } from '../lib/sync';
+import { fileToOptimizedDataUrl } from '../lib/image';
 
 export default function PatientDetails() {
   const { id } = useParams();
@@ -64,11 +65,14 @@ export default function PatientDetails() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setEditForm({ ...editForm, photo: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      fileToOptimizedDataUrl(file, { maxDimension: 960, quality: 0.72 })
+        .then((photo) => {
+          setEditForm((current) => ({ ...current, photo }));
+        })
+        .catch((error) => {
+          console.error('Failed to optimize patient photo', error);
+          toast.error('Failed to process photo');
+        });
     }
   };
 

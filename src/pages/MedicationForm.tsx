@@ -8,6 +8,7 @@ import { generateId } from '../lib/id';
 import { useAuthStore } from '../store/authStore';
 import { format } from 'date-fns';
 import { deleteMedicationCloud, scheduleCaregiverSync } from '../lib/sync';
+import { fileToOptimizedDataUrl } from '../lib/image';
 
 export default function MedicationForm() {
   const { id: patientId, medId } = useParams();
@@ -65,11 +66,12 @@ export default function MedicationForm() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhoto(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      fileToOptimizedDataUrl(file, { maxDimension: 960, quality: 0.7 })
+        .then(setPhoto)
+        .catch((error) => {
+          console.error('Failed to optimize medication photo', error);
+          toast.error('Failed to process photo');
+        });
     }
   };
 

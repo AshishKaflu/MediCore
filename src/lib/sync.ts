@@ -22,9 +22,13 @@ type SyncSummary = {
 };
 
 const PATIENT_BATCH_SIZE = 20;
-const MEDICATION_BATCH_SIZE = 5;
+const MEDICATION_BATCH_SIZE = 10;
 const LOG_BATCH_SIZE = 25;
 const MAX_SYNCED_PHOTO_LENGTH = 200_000;
+const PATIENT_SELECT_COLUMNS = 'id,caregiver_id,first_name,last_name,dob,notes,status,pin,designation,photo,created_at';
+const MEDICATION_SELECT_COLUMNS =
+  'id,patient_id,name,dosage,frequency,type,form,timing,interval,interval_days,start_date,photo,inventory_count,refill_reminder_at,created_at';
+const MEDICATION_LOG_SELECT_COLUMNS = 'id,medication_id,patient_id,status,taken_at,notes';
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -83,12 +87,13 @@ async function selectByIdsInBatches<T>(
   table: 'medications' | 'medication_logs',
   column: 'patient_id' | 'medication_id',
   ids: string[],
-  batchSize: number
+  batchSize: number,
+  selectColumns: string
 ): Promise<T[]> {
   const results: T[] = [];
   for (const batch of chunkArray(ids, batchSize)) {
     await runBatchWithAdaptiveSplit(batch, async (safeBatch) => {
-      const { data, error } = await supabase.from(table).select('*').in(column, safeBatch);
+      const { data, error } = await supabase.from(table).select(selectColumns).in(column, safeBatch);
       if (error) throw error;
       if (data && data.length > 0) results.push(...(data as T[]));
     });
@@ -239,7 +244,7 @@ export async function pullFromCloud(caregiverId: string): Promise<{ patients: nu
     // 1. Pull Patients
     const { data: patients, error: pErr } = await supabase
       .from('patients')
-      .select('*')
+      .select(PATIENT_SELECT_COLUMNS)
       .eq('caregiver_id', caregiverId);
     if (pErr) throw pErr;
     // Merge strategy: do not delete local data when cloud is empty (prevents accidental wipe).
@@ -254,7 +259,8 @@ export async function pullFromCloud(caregiverId: string): Promise<{ patients: nu
         'medications',
         'patient_id',
         tempPatientIds,
-        MEDICATION_BATCH_SIZE
+        MEDICATION_BATCH_SIZE,
+        MEDICATION_SELECT_COLUMNS
       );
       if (medications && medications.length > 0) {
          medicationCount = medications.length;
@@ -268,7 +274,8 @@ export async function pullFromCloud(caregiverId: string): Promise<{ patients: nu
             'medication_logs',
             'medication_id',
             tempMedIds,
-            LOG_BATCH_SIZE
+            LOG_BATCH_SIZE,
+            MEDICATION_LOG_SELECT_COLUMNS
           );
           if (logs && logs.length > 0) {
               logCount = logs.length;
@@ -297,7 +304,7 @@ export async function pullPatientFromCloud(patientId: string) {
 
     const { data: patient, error: pErr } = await supabase
       .from('patients')
-      .select('*')
+      .select(PATIENT_SELECT_COLUMNS)
       .eq('id', patientId)
       .maybeSingle();
     if (pErr) throw pErr;
@@ -305,13 +312,13 @@ export async function pullPatientFromCloud(patientId: string) {
 
     const { data: medications, error: mErr } = await supabase
       .from('medications')
-      .select('*')
+      .select(MEDICATION_SELECT_COLUMNS)
       .eq('patient_id', patientId);
     if (mErr) throw mErr;
 
     const { data: logs, error: lErr } = await supabase
       .from('medication_logs')
-      .select('*')
+      .select(MEDICATION_LOG_SELECT_COLUMNS)
       .eq('patient_id', patientId);
     if (lErr) throw lErr;
     // Merge strategy to avoid wiping local meds/logs if cloud is empty or out-of-date.
@@ -335,21 +342,34 @@ export async function pushToCloud(caregiverId?: string): Promise<{ patients: num
       await normalizeLocalCaregiverOwnership(caregiverId);
     }
 
-    let patients = await db.patients.toArray();
-    let medications = await db.medications.toArray();
-    let logs = await db.medication_logs.toArray();
+    let patients = caregiverId
+      ? await db.patients.where('caregiver_id').equals(caregiverId).toArray()
+      : await db.patients.toArray();
+    let medications: Medication[];
+    let logs: MedicationLog[];
 
     // When we don't know the caregiver (e.g. patient portal marking a dose as taken),
     // never upsert patients. Some legacy schemas enforce foreign keys on caregiver columns,
     // and patient devices shouldn't be creating/updating patient identity records anyway.
     if (!caregiverId) {
       patients = [];
+      medications = await db.medications.toArray();
+      logs = await db.medication_logs.toArray();
+    } else {
+      const patientIds = patients.map((patient) => patient.id);
+      medications =
+        patientIds.length > 0
+          ? await db.medications.where('patient_id').anyOf(patientIds).toArray()
+          : [];
+      logs =
+        patientIds.length > 0
+          ? await db.medication_logs.where('patient_id').anyOf(patientIds).toArray()
+          : [];
     }
 
     // Optional scoping: only push data for a single caregiver.
     // This prevents one caregiver on a shared device from pushing another caregiver's local data.
     if (caregiverId) {
-      patients = patients.filter((p) => p.caregiver_id === caregiverId);
       const patientIds = new Set(patients.map(p => p.id));
       medications = medications.filter(m => patientIds.has(m.patient_id));
       logs = logs.filter(l => patientIds.has(l.patient_id));

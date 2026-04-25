@@ -6,6 +6,7 @@ import { LogOut, Globe, Fingerprint, Bell, ChevronLeft, Camera, Edit2, Trash2, D
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { db } from '../lib/db';
+import { fileToOptimizedDataUrl } from '../lib/image';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -21,6 +22,20 @@ export default function Settings() {
   const [editName, setEditName] = useState(user?.name || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+
+  const getBackupFilename = () => `medicore-backup-${new Date().toISOString().slice(0, 10)}.json`;
+
+  const getFallbackDownloadLocation = () => {
+    const ua = navigator.userAgent || '';
+    const isIPhoneOrIPad = /iPhone|iPad|iPod/i.test(ua);
+    if (isIPhoneOrIPad) {
+      return 'Safari usually saves it to the Downloads folder in the Files app unless you choose another location from the share sheet.';
+    }
+    if (/Safari/i.test(ua) && !/Chrome|CriOS|Edg|Firefox|FxiOS/i.test(ua)) {
+      return 'Safari usually saves it to your Downloads folder.';
+    }
+    return 'Your browser usually saves it to the default Downloads folder.';
+  };
 
   const handleLogout = () => {
     logout();
@@ -48,11 +63,12 @@ export default function Settings() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        updateUser({ photo: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+      fileToOptimizedDataUrl(file, { maxDimension: 720, quality: 0.72 })
+        .then((photo) => updateUser({ photo }))
+        .catch((error) => {
+          console.error('Failed to optimize profile photo', error);
+          toast.error('Failed to process photo');
+        });
     }
   };
 
@@ -88,14 +104,57 @@ export default function Settings() {
       };
 
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
+      const fileName = getBackupFilename();
+      const file = new File([blob], fileName, { type: 'application/json' });
+      const savePicker = (window as typeof window & {
+        showSaveFilePicker?: (options?: {
+          suggestedName?: string;
+          types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+        }) => Promise<{ createWritable: () => Promise<{ write: (data: Blob | File) => Promise<void>; close: () => Promise<void> }> }>;
+      }).showSaveFilePicker;
+
+      if (savePicker) {
+        const handle = await savePicker({
+          suggestedName: fileName,
+          types: [
+            {
+              description: 'JSON backup',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(file);
+        await writable.close();
+        toast.success(`Backup saved as ${fileName}`);
+        return;
+      }
+
+      const canShareFile =
+        typeof navigator.share === 'function' &&
+        typeof (navigator as Navigator & { canShare?: (data?: ShareData) => boolean }).canShare === 'function' &&
+        (navigator as Navigator & { canShare?: (data?: ShareData) => boolean }).canShare?.({ files: [file] });
+
+      if (canShareFile) {
+        await navigator.share({
+          files: [file],
+          title: 'MediCore Backup',
+          text: `Save or share ${fileName}`,
+        });
+        toast.success(`Backup ready: ${fileName}`);
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `medicore-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.download = fileName;
       anchor.click();
       URL.revokeObjectURL(url);
 
-      toast.success(`Backup exported: ${patients.length} patients, ${medications.length} medications, ${logs.length} logs`);
+      toast.success(
+        `Backup exported as ${fileName}. ${getFallbackDownloadLocation()}`
+      );
     } catch (error) {
       console.error('Failed to export local backup', error);
       toast.error('Failed to export local backup');
@@ -306,6 +365,9 @@ export default function Settings() {
               <p className="font-bold text-sm">Local Backup</p>
               <p className="text-xs font-semibold text-[#606C38] opacity-70 mt-1">
                 Export patients, medications, and logs from this device to a JSON file, then import it on another caregiver device.
+              </p>
+              <p className="text-xs font-semibold text-[#606C38] opacity-70 mt-2">
+                Export filename: <span className="font-mono">medicore-backup-YYYY-MM-DD.json</span>
               </p>
             </div>
             <div className="px-4 pb-4 space-y-3">

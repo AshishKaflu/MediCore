@@ -454,37 +454,43 @@ export default function PatientDetails() {
                   <p className="text-sm text-[#283618] opacity-90">{patient.notes}</p>
                 </div>
               )}
-            </div>
-
-            <div className="bg-white rounded-[32px] border border-[#E5E1D8] p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-bold text-lg">Patient Actions</h2>
-                <button
-                  onClick={handleEnterEditMode}
-                  className="text-xs font-bold text-white bg-[#606C38] px-3 py-2 rounded-lg hover:opacity-90 transition shadow-sm"
-                >
-                  Edit Details
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={handleArchivePatient}
-                  className="flex items-center justify-center gap-2 py-3 bg-[#DDA15E]/10 text-[#BC6C25] border border-[#DDA15E]/30 rounded-2xl font-bold hover:bg-[#DDA15E]/20 transition"
-                >
-                  <Archive className="w-4 h-4" />
-                  {patient.status === 'archived' ? 'Restore Patient' : 'Archive Patient'}
-                </button>
-                <button
-                  onClick={handleDeletePatient}
-                  className={`flex items-center justify-center gap-2 py-3 rounded-2xl font-bold transition border ${
-                    isConfirmingDelete
-                      ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                      : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                  }`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                  {isConfirmingDelete ? 'Tap Again To Delete' : 'Delete Patient'}
-                </button>
+              <div className="mt-4 pt-4 border-t border-[#E5E1D8]">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-bold text-lg">Patient Actions</h2>
+                  <button
+                    onClick={() => navigate('/caregiver')}
+                    className="text-xs font-bold text-[#606C38] bg-[#F2F0E4] px-3 py-2 rounded-lg hover:bg-[#E5E1D8] transition"
+                  >
+                    Back to Dashboard
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <button
+                    onClick={handleEnterEditMode}
+                    className="flex items-center justify-center gap-2 py-3 text-white bg-[#606C38] rounded-2xl font-bold hover:opacity-90 transition shadow-sm"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                    Edit Details
+                  </button>
+                  <button
+                    onClick={handleArchivePatient}
+                    className="flex items-center justify-center gap-2 py-3 bg-[#DDA15E]/10 text-[#BC6C25] border border-[#DDA15E]/30 rounded-2xl font-bold hover:bg-[#DDA15E]/20 transition"
+                  >
+                    <Archive className="w-4 h-4" />
+                    {patient.status === 'archived' ? 'Restore Patient' : 'Archive Patient'}
+                  </button>
+                  <button
+                    onClick={handleDeletePatient}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-2xl font-bold transition border ${
+                      isConfirmingDelete
+                        ? 'bg-red-600 text-white border-red-600 animate-pulse'
+                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                    }`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    {isConfirmingDelete ? 'Tap Again To Delete' : 'Delete Patient'}
+                  </button>
+                </div>
               </div>
             </div>
 

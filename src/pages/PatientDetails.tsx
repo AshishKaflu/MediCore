@@ -9,6 +9,7 @@ import { ImageLightbox } from '../components/ImageLightbox';
 import { format } from 'date-fns';
 import { deletePatientCloud, scheduleCaregiverSync } from '../lib/sync';
 import { fileToOptimizedDataUrl } from '../lib/image';
+import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
 
 export default function PatientDetails() {
   const { id } = useParams();
@@ -23,6 +24,7 @@ export default function PatientDetails() {
   const isNewUser = searchParams.get('new') === 'true';
   const [isEditing, setIsEditing] = useState(initEdit);
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', dob: '', notes: '', pin: '', designation: '', photo: '' });
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -56,7 +58,9 @@ export default function PatientDetails() {
         last_name: patient.last_name,
         dob: patient.dob,
         notes: patient.notes || '',
-        pin: (patient as any).pin || ''
+        pin: (patient as any).pin || '',
+        designation: patient.designation || '',
+        photo: patient.photo || '',
       });
       setIsEditing(true);
     }
@@ -68,6 +72,7 @@ export default function PatientDetails() {
       fileToOptimizedDataUrl(file, { maxDimension: 960, quality: 0.72 })
         .then((photo) => {
           setEditForm((current) => ({ ...current, photo }));
+          setPhotoFile(file);
         })
         .catch((error) => {
           console.error('Failed to optimize patient photo', error);
@@ -83,7 +88,9 @@ export default function PatientDetails() {
         last_name: patient.last_name,
         dob: patient.dob,
         notes: patient.notes || '',
-        pin: (patient as any).pin || ''
+        pin: (patient as any).pin || '',
+        designation: patient.designation || '',
+        photo: patient.photo || '',
       });
       setIsEditing(!isEditing);
     }
@@ -95,10 +102,24 @@ export default function PatientDetails() {
       toast.error('Access denied');
       return;
     }
-    await db.patients.update(id, editForm);
-    setIsEditing(false);
-    toast.success('Patient details updated');
-    scheduleCaregiverSync(caregiverId);
+    try {
+      const existingPhoto = patient?.photo;
+      let finalPhoto = editForm.photo;
+      if (photoFile) {
+        finalPhoto = await uploadImageToStorage(photoFile, 'patients');
+      }
+      await db.patients.update(id, { ...editForm, photo: finalPhoto });
+      if (photoFile && existingPhoto && existingPhoto !== finalPhoto) {
+        await removeImageFromStorage(existingPhoto);
+      }
+      setPhotoFile(null);
+      setIsEditing(false);
+      toast.success('Patient details updated');
+      scheduleCaregiverSync(caregiverId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update patient details';
+      toast.error(message);
+    }
   };
 
   const handleCancelEdit = async () => {
@@ -126,6 +147,8 @@ export default function PatientDetails() {
 
     const meds = await db.medications.where('patient_id').equals(id).toArray();
     const medIds = meds.map(m => m.id);
+    const medicationPhotos = meds.map((med) => med.photo).filter(Boolean);
+    const patientPhoto = patient.photo;
     
     await db.transaction('rw', db.patients, db.medications, db.medication_logs, async () => {
       if (medIds.length > 0) {
@@ -134,6 +157,11 @@ export default function PatientDetails() {
       }
       await db.patients.delete(id);
     });
+
+    await Promise.all([
+      removeImageFromStorage(patientPhoto),
+      ...medicationPhotos.map((photo) => removeImageFromStorage(photo)),
+    ]);
     
     if (!skipConfirm) toast.success('Patient deleted');
     deletePatientCloud(id, caregiverId);
@@ -304,7 +332,7 @@ export default function PatientDetails() {
                 </button>
               )}
               <button 
-                onClick={() => { setIsEditing(false); setIsConfirmingDelete(false); }} 
+                onClick={() => { setIsEditing(false); setIsConfirmingDelete(false); setPhotoFile(null); }} 
                 className="flex-1 py-3 text-sm font-bold text-[#606C38] bg-[#F2F0E4] rounded-xl hover:bg-[#E5E1D8] transition"
               >
                 Cancel

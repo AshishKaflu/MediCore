@@ -9,6 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import { format } from 'date-fns';
 import { deleteMedicationCloud, scheduleCaregiverSync } from '../lib/sync';
 import { fileToOptimizedDataUrl } from '../lib/image';
+import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
 
 export default function MedicationForm() {
   const { id: patientId, medId } = useParams();
@@ -27,6 +28,7 @@ export default function MedicationForm() {
   const [inventoryCount, setInventoryCount] = useState(30);
   const [refillReminderAt, setRefillReminderAt] = useState(5);
   const [photo, setPhoto] = useState<string>('');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const isEditing = Boolean(medId);
@@ -67,7 +69,10 @@ export default function MedicationForm() {
     const file = e.target.files?.[0];
     if (file) {
       fileToOptimizedDataUrl(file, { maxDimension: 960, quality: 0.7 })
-        .then(setPhoto)
+        .then((preview) => {
+          setPhoto(preview);
+          setPhotoFile(file);
+        })
         .catch((error) => {
           console.error('Failed to optimize medication photo', error);
           toast.error('Failed to process photo');
@@ -106,6 +111,13 @@ export default function MedicationForm() {
 
     try {
       setIsSaving(true);
+      const existingMedication = isEditing && medId ? await db.medications.get(medId as string) : null;
+      let finalPhoto = photo;
+
+      if (photoFile) {
+        finalPhoto = await uploadImageToStorage(photoFile, 'medications');
+      }
+
       const medData = {
         patient_id: patientId,
         name,
@@ -117,7 +129,7 @@ export default function MedicationForm() {
         interval,
         interval_days: interval === 'x_days' ? intervalDays : undefined,
         start_date: startDate,
-        photo,
+        photo: finalPhoto,
         inventory_count: inventoryCount,
         refill_reminder_at: refillReminderAt,
         created_at: new Date().toISOString()
@@ -125,6 +137,9 @@ export default function MedicationForm() {
 
       if (isEditing) {
         await db.medications.update(medId as string, medData);
+        if (photoFile && existingMedication?.photo && existingMedication.photo !== finalPhoto) {
+          await removeImageFromStorage(existingMedication.photo);
+        }
         toast.success('Medication updated');
       } else {
         await db.medications.add({
@@ -136,7 +151,8 @@ export default function MedicationForm() {
       scheduleCaregiverSync(caregiverId);
       navigate(-1);
     } catch (err) {
-      toast.error('Failed to save medication');
+      const message = err instanceof Error ? err.message : 'Failed to save medication';
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -148,7 +164,9 @@ export default function MedicationForm() {
       return;
     }
     if (window.confirm('Are you sure you want to delete this medication?')) {
+      const medication = await db.medications.get(medId as string);
       await db.medications.delete(medId as string);
+      await removeImageFromStorage(medication?.photo);
       toast.success('Medication deleted');
       deleteMedicationCloud(medId as string);
       navigate(-1);

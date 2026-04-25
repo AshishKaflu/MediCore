@@ -1,14 +1,12 @@
 -- Supabase Database Schema Migration File
 -- Copy/paste into Supabase SQL Editor and run.
 --
--- Canonical schema used by the app:
+-- Final schema for the current MediCore app.
+-- This version matches the app's sanitized sync payloads and current UI model:
 --   caregivers, patients, medications, medication_logs
---
--- This version intentionally removes legacy compatibility layers so the
--- application and database both rely on one clean structure.
 
 -- ==========================================
--- 0. OPTIONAL: WIPE EXISTING DATA
+-- 0. OPTIONAL: WIPE EXISTING APP DATA
 -- ==========================================
 -- Run ONLY if you want to delete all rows:
 /*
@@ -24,20 +22,23 @@ TRUNCATE TABLE public.caregivers CASCADE;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ==========================================
--- 2. Cleanup Legacy Objects
+-- 2. Optional Clean Reset
 -- ==========================================
--- Older versions used `patient` or `primary_caregiver_id`.
--- We drop those legacy paths so sync logic stays predictable.
+-- Uncomment this section if you want to recreate the 4 app tables from scratch.
+/*
+DROP POLICY IF EXISTS "Allow anon access for custom auth caregivers" ON public.caregivers;
+DROP POLICY IF EXISTS "Allow anon access for custom auth patients" ON public.patients;
+DROP POLICY IF EXISTS "Allow anon access for custom auth medications" ON public.medications;
+DROP POLICY IF EXISTS "Allow anon access for custom auth medication_logs" ON public.medication_logs;
 
-DROP TRIGGER IF EXISTS trg_sync_patient_caregiver_ids ON public.patients;
-DROP FUNCTION IF EXISTS public.sync_patient_caregiver_ids();
+DROP FUNCTION IF EXISTS public.register_caregiver(TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.login_caregiver(TEXT, TEXT);
 
-DO $$
-BEGIN
-  IF to_regclass('public.patient') IS NOT NULL AND to_regclass('public.patients') IS NULL THEN
-    ALTER TABLE public.patient RENAME TO patients;
-  END IF;
-END $$;
+DROP TABLE IF EXISTS public.medication_logs CASCADE;
+DROP TABLE IF EXISTS public.medications CASCADE;
+DROP TABLE IF EXISTS public.patients CASCADE;
+DROP TABLE IF EXISTS public.caregivers CASCADE;
+*/
 
 -- ==========================================
 -- 3. Core Tables
@@ -54,7 +55,12 @@ CREATE TABLE IF NOT EXISTS public.caregivers (
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+
+ALTER TABLE public.caregivers ALTER COLUMN email SET NOT NULL;
+ALTER TABLE public.caregivers ALTER COLUMN password_hash SET NOT NULL;
+ALTER TABLE public.caregivers ALTER COLUMN name SET NOT NULL;
+ALTER TABLE public.caregivers ALTER COLUMN created_at SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.patients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -67,14 +73,6 @@ CREATE TABLE IF NOT EXISTS public.patients (
   pin TEXT,
   designation TEXT DEFAULT '',
   photo TEXT,
-  allergies TEXT,
-  emergency_notes TEXT,
-  timezone TEXT,
-  photo_url TEXT,
-  pin_enabled BOOLEAN,
-  pin_hash TEXT,
-  date_of_birth TEXT,
-  updated_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -87,17 +85,8 @@ ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS pin TEXT;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT '';
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS photo TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS allergies TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS emergency_notes TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS timezone TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS photo_url TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS pin_enabled BOOLEAN;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS pin_hash TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
-ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 ALTER TABLE public.patients ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 
--- Migrate any leftover legacy column into the canonical caregiver_id.
 DO $$
 BEGIN
   IF EXISTS (
@@ -112,7 +101,6 @@ BEGIN
       SET caregiver_id = COALESCE(caregiver_id, primary_caregiver_id)
       WHERE caregiver_id IS NULL
     ';
-    EXECUTE 'ALTER TABLE public.patients DROP COLUMN primary_caregiver_id';
   END IF;
 END $$;
 
@@ -149,15 +137,6 @@ CREATE TABLE IF NOT EXISTS public.medications (
   interval_days INTEGER,
   start_date TEXT,
   photo TEXT,
-  prn BOOLEAN,
-  generic_name TEXT,
-  condition_reason TEXT,
-  strength_value TEXT,
-  strength_unit TEXT,
-  created_by UUID,
-  updated_by UUID,
-  updated_at TIMESTAMPTZ,
-  photo_url TEXT,
   inventory_count INTEGER NOT NULL DEFAULT 0,
   refill_reminder_at INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -174,15 +153,6 @@ ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS interval TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS interval_days INTEGER;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS start_date TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS photo TEXT;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS prn BOOLEAN;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS generic_name TEXT;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS condition_reason TEXT;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS strength_value TEXT;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS strength_unit TEXT;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS created_by UUID;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS updated_by UUID;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
-ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS photo_url TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS inventory_count INTEGER DEFAULT 0;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS refill_reminder_at INTEGER DEFAULT 0;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();

@@ -29,6 +29,16 @@ export default function Auth() {
   // If Supabase keys are missing, we throw an alert warning when they try to Auth.
   const hasSupabaseKeys = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
+  const hydrateCaregiverSession = async (userId: string, displayName: string) => {
+    const refreshResult = await refreshCaregiverData(userId);
+    if (refreshResult?.error) {
+      throw new Error(refreshResult.error);
+    }
+
+    login({ id: userId, name: displayName }, 'caregiver');
+    navigate('/caregiver');
+  };
+
   const handleCaregiverAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hasSupabaseKeys) {
@@ -49,9 +59,7 @@ export default function Auth() {
         toast.success('Signup successful! Welcome to MedManage.');
         
         // Data returns the new UUID
-        login({ id: data, name: name || email }, 'caregiver');
-        await refreshCaregiverData(data);
-        navigate('/caregiver');
+        await hydrateCaregiverSession(data, name || email);
       } else {
         const { data, error } = await supabase.rpc('login_caregiver', {
           p_email: email,
@@ -63,9 +71,7 @@ export default function Auth() {
         
         toast.success('Welcome back!');
         // Data returns the JSON auth block
-        login({ id: data.id, name: data.name || data.email }, 'caregiver');
-        await refreshCaregiverData(data.id);
-        navigate('/caregiver');
+        await hydrateCaregiverSession(data.id, data.name || data.email);
       }
     } catch (err: any) {
       toast.error(err.message || 'Authentication failed');

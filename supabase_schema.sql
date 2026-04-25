@@ -49,12 +49,14 @@ CREATE TABLE IF NOT EXISTS public.caregivers (
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
+  photo TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS email TEXT;
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS photo TEXT;
 ALTER TABLE public.caregivers ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
 
 ALTER TABLE public.caregivers ALTER COLUMN email SET NOT NULL;
@@ -247,13 +249,13 @@ AS $$
 DECLARE
   cg_record RECORD;
 BEGIN
-  SELECT id, email, name, password_hash
+  SELECT id, email, name, photo, password_hash
   INTO cg_record
   FROM public.caregivers
   WHERE email = p_email;
 
   IF cg_record.password_hash = crypt(p_password, cg_record.password_hash) THEN
-    RETURN jsonb_build_object('id', cg_record.id, 'email', cg_record.email, 'name', cg_record.name);
+    RETURN jsonb_build_object('id', cg_record.id, 'email', cg_record.email, 'name', cg_record.name, 'photo', cg_record.photo);
   END IF;
 
   RETURN NULL;

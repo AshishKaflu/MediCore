@@ -14,14 +14,14 @@ export function isStorageUrl(value?: string | null): boolean {
 
 export async function uploadImageToStorage(
   file: File,
-  folder: 'patients' | 'medications'
+  folder: 'caregivers' | 'patients' | 'medications'
 ): Promise<string> {
   if (!hasSupabaseKeys) {
     throw new Error('Supabase keys missing');
   }
 
   const blob = await fileToOptimizedJpegBlob(file, {
-    maxDimension: folder === 'patients' ? 960 : 960,
+    maxDimension: folder === 'caregivers' ? 720 : 960,
     quality: 0.72,
   });
 

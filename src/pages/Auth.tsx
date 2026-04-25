@@ -29,13 +29,13 @@ export default function Auth() {
   // If Supabase keys are missing, we throw an alert warning when they try to Auth.
   const hasSupabaseKeys = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-  const hydrateCaregiverSession = async (userId: string, displayName: string) => {
+  const hydrateCaregiverSession = async (userId: string, displayName: string, photo?: string) => {
     const refreshResult = await refreshCaregiverData(userId);
     if (refreshResult?.error) {
       throw new Error(refreshResult.error);
     }
 
-    login({ id: userId, name: displayName }, 'caregiver');
+    login({ id: userId, name: displayName, photo }, 'caregiver');
     navigate('/caregiver');
   };
 
@@ -71,7 +71,7 @@ export default function Auth() {
         
         toast.success('Welcome back!');
         // Data returns the JSON auth block
-        await hydrateCaregiverSession(data.id, data.name || data.email);
+        await hydrateCaregiverSession(data.id, data.name || data.email, data.photo);
       }
     } catch (err: any) {
       toast.error(err.message || 'Authentication failed');

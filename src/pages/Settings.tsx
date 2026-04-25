@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +7,8 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { db } from '../lib/db';
 import { fileToOptimizedDataUrl } from '../lib/image';
+import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
+import { supabase } from '../lib/supabase';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -20,6 +22,8 @@ export default function Settings() {
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
+  const [profilePhotoPreview, setProfilePhotoPreview] = useState(user?.photo || '');
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,6 +40,11 @@ export default function Settings() {
     }
     return 'Your browser usually saves it to the default Downloads folder.';
   };
+
+  useEffect(() => {
+    setEditName(user?.name || '');
+    setProfilePhotoPreview(user?.photo || '');
+  }, [user?.name, user?.photo]);
 
   const handleLogout = () => {
     logout();
@@ -64,7 +73,10 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (file) {
       fileToOptimizedDataUrl(file, { maxDimension: 720, quality: 0.72 })
-        .then((photo) => updateUser({ photo }))
+        .then((photo) => {
+          setProfilePhotoPreview(photo);
+          setPhotoFile(file);
+        })
         .catch((error) => {
           console.error('Failed to optimize profile photo', error);
           toast.error('Failed to process photo');
@@ -72,9 +84,42 @@ export default function Settings() {
     }
   };
 
-  const handleSaveProfile = () => {
-    updateUser({ name: editName });
-    setIsEditingProfile(false);
+  const handleSaveProfile = async () => {
+    if (role !== 'caregiver' || !user?.id) {
+      updateUser({ name: editName });
+      setIsEditingProfile(false);
+      return;
+    }
+
+    try {
+      let finalPhoto = user.photo;
+      if (photoFile) {
+        finalPhoto = await uploadImageToStorage(photoFile, 'patients');
+      }
+
+      const { error } = await supabase
+        .from('caregivers')
+        .update({ name: editName, photo: finalPhoto ?? null })
+        .eq('id', user.id);
+
+      if (error) {
+        throw error;
+      }
+
+      if (photoFile && user.photo && user.photo !== finalPhoto) {
+        await removeImageFromStorage(user.photo);
+      }
+
+      updateUser({ name: editName, photo: finalPhoto });
+      setProfilePhotoPreview(finalPhoto || '');
+      setPhotoFile(null);
+      setIsEditingProfile(false);
+      toast.success('Profile updated');
+    } catch (error) {
+      console.error('Failed to update caregiver profile', error);
+      const message = error instanceof Error ? error.message : 'Failed to update profile';
+      toast.error(message);
+    }
   };
 
   const handleExportBackup = async () => {
@@ -233,8 +278,8 @@ export default function Settings() {
           
           <div className="flex flex-col items-center relative z-10">
             <div className="relative mb-4 group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-              {user?.photo ? (
-                <img src={user.photo} alt="Profile" className="h-20 w-20 rounded-2xl object-cover shadow-sm border-2 border-[#E5E1D8]" />
+              {(profilePhotoPreview || user?.photo) ? (
+                <img src={profilePhotoPreview || user?.photo} alt="Profile" className="h-20 w-20 rounded-2xl object-cover shadow-sm border-2 border-[#E5E1D8]" />
               ) : (
                 <div className="h-20 w-20 bg-[#606C38] text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-sm">
                   {user?.name?.charAt(0) || role?.charAt(0).toUpperCase()}

@@ -24,6 +24,7 @@ type SyncSummary = {
 const PATIENT_BATCH_SIZE = 20;
 const MEDICATION_BATCH_SIZE = 5;
 const LOG_BATCH_SIZE = 25;
+const MAX_SYNCED_PHOTO_LENGTH = 200_000;
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -176,7 +177,7 @@ function sanitizePatientForCloud(patient: Patient, caregiverIdOverride?: string)
     status: patient.status ?? 'active',
     pin: patient.pin ?? null,
     designation: patient.designation ?? '',
-    photo: patient.photo ?? null,
+    photo: getCloudSafePhoto(patient.photo),
     created_at: patient.created_at,
   };
 }
@@ -196,7 +197,7 @@ function sanitizeMedicationForCloud(medication: Medication) {
     interval: medication.interval ?? null,
     interval_days: medication.interval_days ?? null,
     start_date: medication.start_date ?? null,
-    photo: medication.photo ?? null,
+    photo: getCloudSafePhoto(medication.photo),
     inventory_count: medication.inventory_count ?? 0,
     refill_reminder_at: medication.refill_reminder_at ?? 0,
     created_at: medication.created_at,
@@ -212,6 +213,19 @@ function sanitizeMedicationLogForCloud(log: MedicationLog) {
     taken_at: log.taken_at,
     notes: log.notes ?? null,
   };
+}
+
+function getCloudSafePhoto(photo?: string | null): string | null {
+  if (!photo) return null;
+
+  // Large base64 images make medication upserts slow enough to hit Supabase
+  // statement timeouts. Keep them local on the device instead of pushing them
+  // through the main relational sync path.
+  if (photo.length > MAX_SYNCED_PHOTO_LENGTH) {
+    return null;
+  }
+
+  return photo;
 }
 
 // Pull all data from Supabase and hydrate local Dexie

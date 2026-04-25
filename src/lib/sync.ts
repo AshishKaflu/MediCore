@@ -1,4 +1,4 @@
-import { db } from './db';
+import { db, type Medication, type MedicationLog, type Patient } from './db';
 import { supabase } from './supabase';
 import { generateId } from './id';
 
@@ -165,6 +165,55 @@ async function normalizeLocalCaregiverOwnership(caregiverId: string): Promise<vo
   await db.patients.toCollection().modify({ caregiver_id: caregiverId });
 }
 
+function sanitizePatientForCloud(patient: Patient, caregiverIdOverride?: string) {
+  return {
+    id: patient.id,
+    caregiver_id: caregiverIdOverride ?? patient.caregiver_id,
+    first_name: patient.first_name ?? '',
+    last_name: patient.last_name ?? '',
+    dob: patient.dob ?? '',
+    notes: patient.notes ?? '',
+    status: patient.status ?? 'active',
+    pin: patient.pin ?? null,
+    designation: patient.designation ?? '',
+    photo: patient.photo ?? null,
+    created_at: patient.created_at,
+  };
+}
+
+function sanitizeMedicationForCloud(medication: Medication) {
+  const normalizedType = medication.type ?? medication.form ?? null;
+
+  return {
+    id: medication.id,
+    patient_id: medication.patient_id,
+    name: medication.name ?? '',
+    dosage: medication.dosage ?? '',
+    frequency: medication.frequency ?? '',
+    type: normalizedType,
+    form: normalizedType,
+    timing: medication.timing ?? null,
+    interval: medication.interval ?? null,
+    interval_days: medication.interval_days ?? null,
+    start_date: medication.start_date ?? null,
+    photo: medication.photo ?? null,
+    inventory_count: medication.inventory_count ?? 0,
+    refill_reminder_at: medication.refill_reminder_at ?? 0,
+    created_at: medication.created_at,
+  };
+}
+
+function sanitizeMedicationLogForCloud(log: MedicationLog) {
+  return {
+    id: log.id,
+    medication_id: log.medication_id,
+    patient_id: log.patient_id,
+    status: log.status,
+    taken_at: log.taken_at,
+    notes: log.notes ?? null,
+  };
+}
+
 // Pull all data from Supabase and hydrate local Dexie
 export async function pullFromCloud(caregiverId: string): Promise<{ patients: number; medications: number; logs: number; error?: string }> {
   if (!hasSupabaseKeys) return { patients: 0, medications: 0, logs: 0, error: 'Supabase keys missing' };
@@ -292,22 +341,28 @@ export async function pushToCloud(caregiverId?: string): Promise<{ patients: num
       logs = logs.filter(l => patientIds.has(l.patient_id));
     }
 
+    const sanitizedPatients = patients.map((patient) =>
+      sanitizePatientForCloud(patient, caregiverId)
+    );
+    const sanitizedMedications = medications.map(sanitizeMedicationForCloud);
+    const sanitizedLogs = logs.map(sanitizeMedicationLogForCloud);
+
     // Upsert Patients
-    if (patients.length > 0) {
-      await upsertInBatches('patients', patients, PATIENT_BATCH_SIZE);
+    if (sanitizedPatients.length > 0) {
+      await upsertInBatches('patients', sanitizedPatients, PATIENT_BATCH_SIZE);
     }
 
     // Upsert Medications
-    if (medications.length > 0) {
-      await upsertInBatches('medications', medications, MEDICATION_BATCH_SIZE);
+    if (sanitizedMedications.length > 0) {
+      await upsertInBatches('medications', sanitizedMedications, MEDICATION_BATCH_SIZE);
     }
 
     // Upsert Logs
-    if (logs.length > 0) {
-      await upsertInBatches('medication_logs', logs, LOG_BATCH_SIZE);
+    if (sanitizedLogs.length > 0) {
+      await upsertInBatches('medication_logs', sanitizedLogs, LOG_BATCH_SIZE);
     }
 
-    return { patients: patients.length, medications: medications.length, logs: logs.length };
+    return { patients: sanitizedPatients.length, medications: sanitizedMedications.length, logs: sanitizedLogs.length };
   } catch (error) {
     console.error('Failed to push to cloud:', error);
     return { patients: 0, medications: 0, logs: 0, error: (error as any)?.message || 'Failed to push to cloud' };

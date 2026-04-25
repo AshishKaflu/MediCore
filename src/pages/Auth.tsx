@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { db } from '../lib/db';
 import { refreshCaregiverData, refreshPatientData } from '../lib/sync';
+import { normalizeEmail, validateCaregiverCredentials, validatePatientPin } from '../lib/validation';
+
+const PATIENT_LOGIN_SELECT_COLUMNS = 'id,caregiver_id,first_name,last_name,photo';
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -48,22 +51,29 @@ export default function Auth() {
 
     setIsLoading(true);
     try {
+      const credentials = validateCaregiverCredentials({
+        email,
+        password,
+        name,
+        isSignUp,
+      });
+
       if (isSignUp) {
         const { data, error } = await supabase.rpc('register_caregiver', {
-          p_email: email,
-          p_password: password,
-          p_name: name
+          p_email: credentials.email,
+          p_password: credentials.password,
+          p_name: credentials.name
         });
         
         if (error) throw error;
         toast.success('Signup successful! Welcome to MedManage.');
         
         // Data returns the new UUID
-        await hydrateCaregiverSession(data, name || email);
+        await hydrateCaregiverSession(data, credentials.name || credentials.email);
       } else {
         const { data, error } = await supabase.rpc('login_caregiver', {
-          p_email: email,
-          p_password: password
+          p_email: credentials.email,
+          p_password: credentials.password
         });
         
         if (error) throw error;
@@ -82,22 +92,23 @@ export default function Auth() {
 
   const handlePatientPinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pin.length < 4) {
-      toast.error('PIN must be at least 4 digits');
-      return;
-    }
 
     setIsLoading(true);
     try {
+      const normalizedPin = validatePatientPin(pin);
       let patientsFound: any[] = [];
 
       // Query local Dexie test DB since all patient creation/saving occurs locally
       const localPatients = await db.patients.toArray();
-      patientsFound = localPatients.filter(p => p.pin === pin);
+      patientsFound = localPatients.filter(p => p.pin === normalizedPin);
 
       // If not found locally, try Supabase (new device / cleared storage)
       if ((!patientsFound || patientsFound.length === 0) && hasSupabaseKeys) {
-        const { data, error } = await supabase.from('patients').select('*').eq('pin', pin);
+        const { data, error } = await supabase
+          .from('patients')
+          .select(PATIENT_LOGIN_SELECT_COLUMNS)
+          .eq('pin', normalizedPin)
+          .limit(5);
         if (error) throw error;
         patientsFound = data || [];
       }
@@ -129,7 +140,14 @@ export default function Auth() {
         await refreshPatientData(patientData.id);
       }
       toast.success(`Welcome, ${patientData.first_name || 'Patient'}!`);
-      login({ id: patientData.id, name: `${patientData.first_name} ${patientData.last_name}`, ...patientData }, 'patient');
+      login(
+        {
+          id: patientData.id,
+          name: [patientData.first_name, patientData.last_name].filter(Boolean).join(' ').trim() || 'Patient',
+          photo: patientData.photo,
+        },
+        'patient'
+      );
       navigate('/patient');
     } catch (e: any) {
       toast.error(e?.message || 'Failed to load patient data');
@@ -189,11 +207,11 @@ export default function Auth() {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="h-5 w-5 text-[#606C38] opacity-50" />
                 </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(normalizeEmail(e.target.value))}
                   className="w-full pl-10 p-4 bg-[#F2F0E4] border border-[#E5E1D8] rounded-2xl focus:outline-none focus:border-[#606C38] transition-all font-bold text-[#283618]"
                   placeholder="caregiver@email.com"
                 />
@@ -249,7 +267,7 @@ export default function Auth() {
                   >
                     <div>
                       <p className="font-bold text-[#283618]">{pt.first_name} {pt.last_name}</p>
-                      <p className="text-xs font-semibold text-[#606C38] opacity-70">Caregiver ID: {pt.caregiver_id.substring(0, 8)}...</p>
+                      <p className="text-xs font-semibold text-[#606C38] opacity-70">Select your patient profile</p>
                     </div>
                     <ArrowRight className="w-5 h-5 text-[#DDA15E]" />
                   </button>
@@ -272,7 +290,7 @@ export default function Auth() {
                   inputMode="numeric"
                   maxLength={6}
                   value={pin}
-                  onChange={(e) => setPin(e.target.value)}
+                  onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="w-full text-center text-3xl tracking-[1em] p-4 bg-[#F2F0E4] border border-[#E5E1D8] rounded-2xl focus:outline-none focus:border-[#606C38] transition-all font-mono text-[#283618]"
                   placeholder="••••"
                   autoComplete="off"

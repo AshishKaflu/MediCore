@@ -9,6 +9,13 @@ import { db } from '../lib/db';
 import { fileToOptimizedDataUrl } from '../lib/image';
 import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
 import { supabase } from '../lib/supabase';
+import {
+  sanitizeImportedMedication,
+  sanitizeImportedMedicationLog,
+  sanitizeImportedPatient,
+  sanitizeShortText,
+} from '../lib/validation';
+import { scheduleCaregiverSync } from '../lib/sync';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -92,6 +99,11 @@ export default function Settings() {
     }
 
     try {
+      const finalName = sanitizeShortText(editName, 80);
+      if (finalName.length < 2) {
+        throw new Error('Please enter your full name');
+      }
+
       let finalPhoto = user.photo;
       if (photoFile) {
         finalPhoto = await uploadImageToStorage(photoFile, 'caregivers');
@@ -99,7 +111,7 @@ export default function Settings() {
 
       const { error } = await supabase
         .from('caregivers')
-        .update({ name: editName, photo: finalPhoto ?? null })
+        .update({ name: finalName, photo: finalPhoto ?? null })
         .eq('id', user.id);
 
       if (error) {
@@ -110,8 +122,9 @@ export default function Settings() {
         await removeImageFromStorage(user.photo);
       }
 
-      updateUser({ name: editName, photo: finalPhoto });
+      updateUser({ name: finalName, photo: finalPhoto });
       setProfilePhotoPreview(finalPhoto || '');
+      setEditName(finalName);
       setPhotoFile(null);
       setIsEditingProfile(false);
       toast.success('Profile updated');
@@ -233,19 +246,31 @@ export default function Settings() {
         return;
       }
 
-      const normalizedPatients = patients.map((patient) => ({
-        ...patient,
-        caregiver_id: user.id,
-      }));
+      const normalizedPatients = patients
+        .map((patient) => sanitizeImportedPatient(patient, user.id))
+        .filter(Boolean);
+      const importedPatientIds = new Set(normalizedPatients.map((patient) => patient.id));
+      const normalizedMedications = medications
+        .map((medication) => sanitizeImportedMedication(medication))
+        .filter((medication): medication is NonNullable<typeof medication> => Boolean(medication && importedPatientIds.has(medication.patient_id)));
+      const importedMedicationIds = new Set(normalizedMedications.map((medication) => medication.id));
+      const normalizedMedicationLogs = medicationLogs
+        .map((log) => sanitizeImportedMedicationLog(log))
+        .filter(
+          (log): log is NonNullable<typeof log> =>
+            Boolean(log && importedPatientIds.has(log.patient_id) && importedMedicationIds.has(log.medication_id))
+        );
 
       await db.transaction('rw', db.patients, db.medications, db.medication_logs, async () => {
         if (normalizedPatients.length > 0) await db.patients.bulkPut(normalizedPatients);
-        if (medications.length > 0) await db.medications.bulkPut(medications);
-        if (medicationLogs.length > 0) await db.medication_logs.bulkPut(medicationLogs);
+        if (normalizedMedications.length > 0) await db.medications.bulkPut(normalizedMedications);
+        if (normalizedMedicationLogs.length > 0) await db.medication_logs.bulkPut(normalizedMedicationLogs);
       });
 
+      scheduleCaregiverSync(user.id);
+
       toast.success(
-        `Backup imported: ${normalizedPatients.length} patients, ${medications.length} medications, ${medicationLogs.length} logs`
+        `Backup imported: ${normalizedPatients.length} patients, ${normalizedMedications.length} medications, ${normalizedMedicationLogs.length} logs`
       );
     } catch (error) {
       console.error('Failed to import local backup', error);

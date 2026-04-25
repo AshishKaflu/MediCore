@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import { deleteMedicationCloud, scheduleCaregiverSync } from '../lib/sync';
 import { fileToOptimizedDataUrl } from '../lib/image';
 import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
+import { sanitizeMedicationInput } from '../lib/validation';
 
 export default function MedicationForm() {
   const { id: patientId, medId } = useParams();
@@ -96,10 +97,6 @@ export default function MedicationForm() {
 
   const handleSave = async () => {
     if (isSaving) return;
-    if (!name || timings.length === 0) {
-      toast.error('Please provide a name and at least one time');
-      return;
-    }
     if (!patientId || !isOwner) {
       toast.error('Access denied');
       return;
@@ -112,7 +109,19 @@ export default function MedicationForm() {
     try {
       setIsSaving(true);
       const existingMedication = isEditing && medId ? await db.medications.get(medId as string) : null;
-      let finalPhoto = photo;
+      const sanitized = sanitizeMedicationInput({
+        name,
+        dosage,
+        type,
+        interval,
+        intervalDays,
+        startDate,
+        timings,
+        inventoryCount,
+        refillReminderAt,
+        photo,
+      });
+      let finalPhoto = sanitized.photo;
 
       if (photoFile) {
         finalPhoto = await uploadImageToStorage(photoFile, 'medications');
@@ -120,19 +129,19 @@ export default function MedicationForm() {
 
       const medData = {
         patient_id: patientId,
-        name,
-        dosage,
-        frequency: interval === 'daily' ? `${timings.length}x daily` : interval, // legacy compatible
-        form: type,
-        type,
-        timing: timings.join(','),
-        interval,
-        interval_days: interval === 'x_days' ? intervalDays : undefined,
-        start_date: startDate,
+        name: sanitized.name,
+        dosage: sanitized.dosage,
+        frequency: sanitized.interval === 'daily' ? `${sanitized.timings.length}x daily` : sanitized.interval,
+        form: sanitized.type,
+        type: sanitized.type,
+        timing: sanitized.timings.join(','),
+        interval: sanitized.interval,
+        interval_days: sanitized.intervalDays,
+        start_date: sanitized.startDate,
         photo: finalPhoto,
-        inventory_count: inventoryCount,
-        refill_reminder_at: refillReminderAt,
-        created_at: new Date().toISOString()
+        inventory_count: sanitized.inventoryCount,
+        refill_reminder_at: sanitized.refillReminderAt,
+        created_at: existingMedication?.created_at || new Date().toISOString()
       };
 
       if (isEditing) {
@@ -298,7 +307,7 @@ export default function MedicationForm() {
               <label className="block text-xs font-bold text-[#606C38] mb-1">Every X Days</label>
               <input 
                 type="number" min="1"
-                value={intervalDays} onChange={e => setIntervalDays(parseInt(e.target.value))}
+                value={intervalDays} onChange={e => setIntervalDays(Math.max(1, Number.parseInt(e.target.value || '1', 10) || 1))}
                 className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]" 
               />
             </div>
@@ -336,7 +345,7 @@ export default function MedicationForm() {
               <label className="block text-xs font-bold text-[#606C38] mb-1">Current Inventory</label>
               <input 
                 type="number" min="0"
-                value={inventoryCount} onChange={e => setInventoryCount(parseInt(e.target.value))}
+                value={inventoryCount} onChange={e => setInventoryCount(Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0))}
                 className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]" 
               />
             </div>
@@ -344,7 +353,7 @@ export default function MedicationForm() {
               <label className="block text-xs font-bold text-[#DDA15E] mb-1">Refill Alert At</label>
               <input 
                 type="number" min="0"
-                value={refillReminderAt} onChange={e => setRefillReminderAt(parseInt(e.target.value))}
+                value={refillReminderAt} onChange={e => setRefillReminderAt(Math.max(0, Number.parseInt(e.target.value || '0', 10) || 0))}
                 className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#DDA15E] outline-none text-[#283618]" 
               />
             </div>

@@ -64,6 +64,8 @@ ALTER TABLE public.caregivers ALTER COLUMN password_hash SET NOT NULL;
 ALTER TABLE public.caregivers ALTER COLUMN name SET NOT NULL;
 ALTER TABLE public.caregivers ALTER COLUMN created_at SET NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_caregivers_email_lower ON public.caregivers (lower(email));
+
 CREATE TABLE IF NOT EXISTS public.patients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   caregiver_id UUID NOT NULL REFERENCES public.caregivers(id) ON DELETE CASCADE,
@@ -111,6 +113,24 @@ ALTER TABLE public.patients ALTER COLUMN first_name SET NOT NULL;
 ALTER TABLE public.patients ALTER COLUMN last_name SET NOT NULL;
 ALTER TABLE public.patients ALTER COLUMN status SET NOT NULL;
 ALTER TABLE public.patients ALTER COLUMN created_at SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'patients_status_check'
+  ) THEN
+    ALTER TABLE public.patients
+      ADD CONSTRAINT patients_status_check
+      CHECK (status IN ('active', 'archived'));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'patients_pin_format_check'
+  ) THEN
+    ALTER TABLE public.patients
+      ADD CONSTRAINT patients_pin_format_check
+      CHECK (pin IS NULL OR pin ~ '^[0-9]{4,6}$');
+  END IF;
+END $$;
 
 DO $$
 BEGIN
@@ -169,6 +189,31 @@ ALTER TABLE public.medications ALTER COLUMN created_at SET NOT NULL;
 DO $$
 BEGIN
   IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'medications_inventory_count_check'
+  ) THEN
+    ALTER TABLE public.medications
+      ADD CONSTRAINT medications_inventory_count_check
+      CHECK (inventory_count >= 0);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'medications_refill_reminder_check'
+  ) THEN
+    ALTER TABLE public.medications
+      ADD CONSTRAINT medications_refill_reminder_check
+      CHECK (refill_reminder_at >= 0);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'medications_interval_days_check'
+  ) THEN
+    ALTER TABLE public.medications
+      ADD CONSTRAINT medications_interval_days_check
+      CHECK (interval_days IS NULL OR interval_days > 0);
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'medications_patient_id_fkey'
   ) THEN
     ALTER TABLE public.medications
@@ -198,6 +243,17 @@ ALTER TABLE public.medication_logs ALTER COLUMN medication_id SET NOT NULL;
 ALTER TABLE public.medication_logs ALTER COLUMN patient_id SET NOT NULL;
 ALTER TABLE public.medication_logs ALTER COLUMN status SET NOT NULL;
 ALTER TABLE public.medication_logs ALTER COLUMN taken_at SET NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'medication_logs_status_check'
+  ) THEN
+    ALTER TABLE public.medication_logs
+      ADD CONSTRAINT medication_logs_status_check
+      CHECK (status IN ('taken', 'missed', 'skipped'));
+  END IF;
+END $$;
 
 DO $$
 BEGIN
@@ -232,9 +288,23 @@ SECURITY DEFINER
 AS $$
 DECLARE
   new_id UUID;
+  normalized_email TEXT := lower(trim(p_email));
+  normalized_name TEXT := trim(p_name);
 BEGIN
+  IF normalized_email = '' THEN
+    RAISE EXCEPTION 'Email is required';
+  END IF;
+
+  IF char_length(p_password) < 8 THEN
+    RAISE EXCEPTION 'Password must be at least 8 characters';
+  END IF;
+
+  IF char_length(normalized_name) < 2 THEN
+    RAISE EXCEPTION 'Name must be at least 2 characters';
+  END IF;
+
   INSERT INTO public.caregivers (email, password_hash, name)
-  VALUES (p_email, crypt(p_password, gen_salt('bf')), p_name)
+  VALUES (normalized_email, crypt(p_password, gen_salt('bf')), normalized_name)
   RETURNING id INTO new_id;
 
   RETURN new_id;
@@ -248,11 +318,12 @@ SECURITY DEFINER
 AS $$
 DECLARE
   cg_record RECORD;
+  normalized_email TEXT := lower(trim(p_email));
 BEGIN
   SELECT id, email, name, photo, password_hash
   INTO cg_record
   FROM public.caregivers
-  WHERE email = p_email;
+  WHERE lower(email) = normalized_email;
 
   IF cg_record.password_hash = crypt(p_password, cg_record.password_hash) THEN
     RETURN jsonb_build_object('id', cg_record.id, 'email', cg_record.email, 'name', cg_record.name, 'photo', cg_record.photo);

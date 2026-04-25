@@ -7,7 +7,6 @@ interface UserContext {
   id: string;
   name: string;
   photo?: string;
-  [key: string]: any;
 }
 
 interface AuthState {

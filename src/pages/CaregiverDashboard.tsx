@@ -2,13 +2,13 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
-import { Settings as SettingsIcon, Plus, AlertCircle, Activity, Users, Pill, Edit2, Archive, Trash2, ChevronRight, RotateCcw } from 'lucide-react';
+import { Settings as SettingsIcon, Plus, AlertCircle, Activity, Users, Pill, Edit2, ChevronRight, RotateCcw } from 'lucide-react';
 import { db } from '../lib/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LineChart, Line, ResponsiveContainer, XAxis, Tooltip, CartesianGrid } from 'recharts';
 import { toast } from 'sonner';
-import { deletePatientCloud, refreshCaregiverData, scheduleCaregiverSync, syncCaregiverNow } from '../lib/sync';
+import { refreshCaregiverData, scheduleCaregiverSync, syncCaregiverNow } from '../lib/sync';
 import { generateId } from '../lib/id';
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, isSameDay, parseISO, subDays } from 'date-fns';
 
@@ -18,7 +18,6 @@ export default function CaregiverDashboard() {
   const user = useAuthStore(state => state.user);
   const caregiverId = user?.id || '';
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
-  const [patientToDelete, setPatientToDelete] = useState<string | null>(null);
   const [isSyncingNow, setIsSyncingNow] = useState(false);
 
   // Keep this device in sync with Supabase without requiring re-login.
@@ -199,45 +198,6 @@ export default function CaregiverDashboard() {
       console.error('Failed to add patient', error);
       toast.error('Failed to add patient');
     }
-  };
-
-  const handleArchive = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const patient = patients.find(p => p.id === id);
-    if (!patient) return;
-    
-    // Toggle archive status
-    const newStatus = patient.status === 'archived' ? 'active' : 'archived';
-    await db.patients.update(id, { status: newStatus });
-    toast.success(newStatus === 'archived' ? 'Patient archived' : 'Patient unarchived');
-    setSelectedPatientId(null);
-    scheduleCaregiverSync(caregiverId);
-  };
-
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    if (patientToDelete !== id) {
-      setPatientToDelete(id);
-      return;
-    }
-
-    const meds = await db.medications.where('patient_id').equals(id).toArray();
-    const medIds = meds.map(m => m.id);
-    
-    await db.transaction('rw', db.patients, db.medications, db.medication_logs, async () => {
-      if (medIds.length > 0) {
-         await db.medication_logs.where('medication_id').anyOf(medIds).delete();
-         await db.medications.where('patient_id').equals(id).delete();
-      }
-      await db.patients.delete(id);
-    });
-    toast.success('Patient deleted');
-    setPatientToDelete(null);
-    setSelectedPatientId(null);
-
-    // After cascade deleting, push up to supabase.
-    deletePatientCloud(id, caregiverId);
   };
 
   const handleManualSync = async () => {
@@ -421,7 +381,7 @@ export default function CaregiverDashboard() {
                     animate={{opacity: 1, y: 0}}
                     transition={{ delay: idx * 0.05 }}
                     key={patient.id} 
-                    onClick={() => { setSelectedPatientId(selectedPatientId === patient.id ? null : patient.id); setPatientToDelete(null); }}
+                    onClick={() => { setSelectedPatientId(selectedPatientId === patient.id ? null : patient.id); }}
                     className={`bg-white p-4 rounded-[32px] shadow-sm border ${selectedPatientId === patient.id ? 'border-[#606C38] shadow-md' : 'border-[#E5E1D8]'} flex flex-col cursor-pointer transition-all group relative overflow-hidden`}
                   >
                   {/* Subtle adherence indicator bar */}
@@ -460,27 +420,20 @@ export default function CaregiverDashboard() {
                         exit={{ opacity: 0, height: 0, marginTop: 0 }}
                         className="pl-3 overflow-hidden border-t border-[#E5E1D8] pt-4"
                       >
-                         <div className="grid grid-cols-4 gap-2">
+                         <div className="grid grid-cols-3 gap-2">
                            <button 
-                             onClick={(e) => { e.stopPropagation(); navigate(`/caregiver/patient/${patient.id}?edit=true`); }}
+                             onClick={(e) => { e.stopPropagation(); navigate(`/caregiver/patient/${patient.id}?mode=edit`); }}
                              className="flex flex-col items-center gap-1.5 text-[#606C38] hover:text-[#283618] transition"
                            >
                              <div className="w-10 h-10 rounded-full bg-[#F2F0E4] flex items-center justify-center"><Edit2 className="w-4 h-4"/></div>
                              <span className="text-[10px] font-bold uppercase tracking-wider">Edit</span>
                            </button>
                            <button 
-                             onClick={(e) => handleArchive(patient.id, e)}
+                             onClick={(e) => { e.stopPropagation(); navigate(`/caregiver/patient/${patient.id}/medication/new`); }}
                              className="flex flex-col items-center gap-1.5 text-[#DDA15E] hover:text-[#BC6C25] transition"
                            >
-                             <div className="w-10 h-10 rounded-full bg-[#DDA15E]/10 flex items-center justify-center"><Archive className="w-4 h-4"/></div>
-                             <span className="text-[10px] font-bold uppercase tracking-wider">Archive</span>
-                           </button>
-                           <button 
-                             onClick={(e) => handleDelete(patient.id, e)}
-                             className={`flex flex-col items-center gap-1.5 transition ${patientToDelete === patient.id ? 'text-red-700 animate-pulse' : 'text-red-500 hover:text-red-700'}`}
-                           >
-                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${patientToDelete === patient.id ? 'bg-red-200' : 'bg-red-50'}`}><Trash2 className="w-4 h-4"/></div>
-                             <span className="text-[10px] font-bold uppercase tracking-wider">{patientToDelete === patient.id ? 'Sure?' : 'Delete'}</span>
+                             <div className="w-10 h-10 rounded-full bg-[#DDA15E]/10 flex items-center justify-center"><Plus className="w-4 h-4"/></div>
+                             <span className="text-[10px] font-bold uppercase tracking-wider">Add Medicine</span>
                            </button>
                            <button 
                              onClick={(e) => { e.stopPropagation(); navigate(`/caregiver/patient/${patient.id}`); }}
@@ -517,7 +470,12 @@ export default function CaregiverDashboard() {
                          </div>
                       </div>
                       <button 
-                         onClick={(e) => handleArchive(patient.id, e)}
+                         onClick={async (e) => {
+                           e.stopPropagation();
+                           await db.patients.update(patient.id, { status: 'active' });
+                           toast.success('Patient restored');
+                           scheduleCaregiverSync(caregiverId);
+                         }}
                          className="text-[10px] font-bold text-[#606C38] bg-[#F2F0E4] px-3 py-1.5 rounded-lg uppercase tracking-wider hover:bg-[#E5E1D8]"
                       >
                          Restore

@@ -1,0 +1,5 @@
+{
+  "name": "MedManage: Caregiver Portal",
+  "description": "A HIPAA-compliant, caregiver-focused medication management app with offline support, Supabase backend, multi-language, and biometric login functionality.",
+  "requestFramePermissions": []
+}

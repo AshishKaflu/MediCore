@@ -20,6 +20,7 @@ export interface Medication {
   name: string;
   dosage: string;
   frequency: string; // Legacy, keep for compatibility or just keep around
+  form?: string; // Legacy cloud schema compatibility
   type?: string; // 'tablet', 'liquid', 'injection', etc.
   timing?: string; // comma-joined times, e.g., '08:00,20:00'
   interval?: 'daily' | 'alternate' | 'x_days'; 

@@ -48,7 +48,7 @@ export default function MedicationForm() {
           }
           setName(med.name);
           setDosage(med.dosage);
-          if (med.type) setType(med.type);
+          if (med.type || med.form) setType((med.type || med.form) as string);
           if (med.interval) setIntervalVal(med.interval as 'daily'|'alternate'|'x_days');
           if (med.interval_days) setIntervalDays(med.interval_days);
           if (med.start_date) setStartDate(med.start_date);
@@ -109,6 +109,7 @@ export default function MedicationForm() {
         name,
         dosage,
         frequency: interval === 'daily' ? `${timings.length}x daily` : interval, // legacy compatible
+        form: type,
         type,
         timing: timings.join(','),
         interval,

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { useTranslation } from 'react-i18next';
-import { LogOut, Globe, Fingerprint, Bell, ChevronLeft, Camera, Edit2, Trash2 } from 'lucide-react';
+import { LogOut, Globe, Fingerprint, Bell, ChevronLeft, Camera, Edit2, Trash2, Download, Upload } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { db } from '../lib/db';
@@ -20,6 +20,7 @@ export default function Settings() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogout = () => {
     logout();
@@ -58,6 +59,96 @@ export default function Settings() {
   const handleSaveProfile = () => {
     updateUser({ name: editName });
     setIsEditingProfile(false);
+  };
+
+  const handleExportBackup = async () => {
+    if (role !== 'caregiver' || !user?.id) {
+      toast.error('Backup export is available for caregiver accounts only');
+      return;
+    }
+
+    try {
+      const patients = await db.patients.where('caregiver_id').equals(user.id).toArray();
+      const patientIds = patients.map((patient) => patient.id);
+      const medications =
+        patientIds.length > 0 ? await db.medications.where('patient_id').anyOf(patientIds).toArray() : [];
+      const logs =
+        patientIds.length > 0 ? await db.medication_logs.where('patient_id').anyOf(patientIds).toArray() : [];
+
+      const payload = {
+        version: 1,
+        exported_at: new Date().toISOString(),
+        caregiver: {
+          id: user.id,
+          name: user.name || '',
+        },
+        patients,
+        medications,
+        medication_logs: logs,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `medicore-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+
+      toast.success(`Backup exported: ${patients.length} patients, ${medications.length} medications, ${logs.length} logs`);
+    } catch (error) {
+      console.error('Failed to export local backup', error);
+      toast.error('Failed to export local backup');
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (role !== 'caregiver' || !user?.id) {
+      toast.error('Backup import is available for caregiver accounts only');
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text) as {
+        version?: number;
+        patients?: any[];
+        medications?: any[];
+        medication_logs?: any[];
+      };
+
+      const patients = Array.isArray(parsed.patients) ? parsed.patients : [];
+      const medications = Array.isArray(parsed.medications) ? parsed.medications : [];
+      const medicationLogs = Array.isArray(parsed.medication_logs) ? parsed.medication_logs : [];
+
+      if (patients.length === 0 && medications.length === 0 && medicationLogs.length === 0) {
+        toast.error('Backup file is empty or invalid');
+        return;
+      }
+
+      const normalizedPatients = patients.map((patient) => ({
+        ...patient,
+        caregiver_id: user.id,
+      }));
+
+      await db.transaction('rw', db.patients, db.medications, db.medication_logs, async () => {
+        if (normalizedPatients.length > 0) await db.patients.bulkPut(normalizedPatients);
+        if (medications.length > 0) await db.medications.bulkPut(medications);
+        if (medicationLogs.length > 0) await db.medication_logs.bulkPut(medicationLogs);
+      });
+
+      toast.success(
+        `Backup imported: ${normalizedPatients.length} patients, ${medications.length} medications, ${medicationLogs.length} logs`
+      );
+    } catch (error) {
+      console.error('Failed to import local backup', error);
+      toast.error('Failed to import backup file');
+    } finally {
+      e.target.value = '';
+    }
   };
 
   const languageNames: Record<string, string> = {
@@ -208,6 +299,38 @@ export default function Settings() {
             </button>
           </div>
         </div>
+
+        {role === 'caregiver' && (
+          <div className="bg-white rounded-[32px] p-2 shadow-sm border border-[#E5E1D8] mt-4">
+            <div className="p-4">
+              <p className="font-bold text-sm">Local Backup</p>
+              <p className="text-xs font-semibold text-[#606C38] opacity-70 mt-1">
+                Export patients, medications, and logs from this device to a JSON file, then import it on another caregiver device.
+              </p>
+            </div>
+            <div className="px-4 pb-4 space-y-3">
+              <button
+                onClick={handleExportBackup}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-[#606C38] text-white border border-[#606C38] rounded-xl font-bold hover:opacity-90 transition"
+              >
+                <Download className="w-4 h-4" /> Export Local Backup
+              </button>
+              <button
+                onClick={() => backupInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-[#F2F0E4] text-[#606C38] border border-[#E5E1D8] rounded-xl font-bold hover:bg-[#E5E1D8] transition"
+              >
+                <Upload className="w-4 h-4" /> Import Backup File
+              </button>
+              <input
+                ref={backupInputRef}
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={handleImportBackup}
+              />
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-[32px] p-6 shadow-sm border border-[#E5E1D8]">
           <p className="font-bold text-sm">Diagnostics</p>

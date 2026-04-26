@@ -6,8 +6,8 @@ import { LogOut, Globe, Fingerprint, Bell, ChevronLeft, Camera, Edit2, Trash2, D
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { db } from '../lib/db';
-import { fileToOptimizedDataUrl } from '../lib/image';
-import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
+import { fileToOptimizedDataUrl, IMAGE_FILE_ACCEPT } from '../lib/image';
+import { removeImageFromStorage, saveImageWithFallback } from '../lib/storage';
 import { supabase } from '../lib/supabase';
 import {
   sanitizeImportedMedication,
@@ -105,8 +105,11 @@ export default function Settings() {
       }
 
       let finalPhoto = user.photo;
+      let photoWarning = '';
       if (photoFile) {
-        finalPhoto = await uploadImageToStorage(photoFile, 'caregivers');
+        const storedPhoto = await saveImageWithFallback(photoFile, 'caregivers');
+        finalPhoto = storedPhoto.photo;
+        photoWarning = storedPhoto.warning || '';
       }
 
       const { error } = await supabase
@@ -127,7 +130,7 @@ export default function Settings() {
       setEditName(finalName);
       setPhotoFile(null);
       setIsEditingProfile(false);
-      toast.success('Profile updated');
+      toast.success(photoWarning || 'Profile updated');
     } catch (error) {
       console.error('Failed to update caregiver profile', error);
       const message = error instanceof Error ? error.message : 'Failed to update profile';
@@ -318,7 +321,7 @@ export default function Settings() {
                 ref={fileInputRef} 
                 onChange={handlePhotoUpload} 
                 className="hidden" 
-                accept="image/*" 
+                accept={IMAGE_FILE_ACCEPT} 
               />
             </div>
 

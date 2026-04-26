@@ -150,6 +150,8 @@ That setup now also provisions the public Supabase Storage bucket used for careg
 
 If image upload shows `bucket not found`, rerun `supabase_schema.sql` in the Supabase SQL editor for the target project so the storage bucket and policies are created.
 
+The app normalizes uploaded images to JPEG before saving to Supabase Storage. File pickers now explicitly allow common formats including `jpg`, `jpeg`, `png`, `webp`, `avif`, `heic`, and `heif`, but HEIC/HEIF still depends on whether the current browser can decode that file locally before upload.
+
 ## Status
 
 MediCore is currently structured as a frontend-first application suitable for prototype, pilot, or staged production hardening workflows. Before production use in a regulated environment, review authentication, authorization, secret handling, auditability, and compliance requirements in the context of your deployment target.

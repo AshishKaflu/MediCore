@@ -8,8 +8,8 @@ import { generateId } from '../lib/id';
 import { useAuthStore } from '../store/authStore';
 import { format } from 'date-fns';
 import { deleteMedicationCloud, scheduleCaregiverSync } from '../lib/sync';
-import { fileToOptimizedDataUrl } from '../lib/image';
-import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
+import { fileToOptimizedDataUrl, IMAGE_FILE_ACCEPT } from '../lib/image';
+import { removeImageFromStorage, saveImageWithFallback } from '../lib/storage';
 import { sanitizeMedicationInput } from '../lib/validation';
 
 export default function MedicationForm() {
@@ -122,9 +122,12 @@ export default function MedicationForm() {
         photo,
       });
       let finalPhoto = sanitized.photo;
+      let photoWarning = '';
 
       if (photoFile) {
-        finalPhoto = await uploadImageToStorage(photoFile, 'medications');
+        const storedPhoto = await saveImageWithFallback(photoFile, 'medications');
+        finalPhoto = storedPhoto.photo;
+        photoWarning = storedPhoto.warning || '';
       }
 
       const medData = {
@@ -149,13 +152,13 @@ export default function MedicationForm() {
         if (photoFile && existingMedication?.photo && existingMedication.photo !== finalPhoto) {
           await removeImageFromStorage(existingMedication.photo);
         }
-        toast.success('Medication updated');
+        toast.success(photoWarning || 'Medication updated');
       } else {
         await db.medications.add({
           id: generateId(),
           ...medData
         });
-        toast.success('Medication added');
+        toast.success(photoWarning || 'Medication added');
       }
       scheduleCaregiverSync(caregiverId);
       navigate(-1);
@@ -222,7 +225,7 @@ export default function MedicationForm() {
           </div>
           <input 
             type="file" 
-            accept="image/*" 
+            accept={IMAGE_FILE_ACCEPT} 
             ref={fileInputRef} 
             onChange={handlePhotoUpload} 
             className="hidden" 

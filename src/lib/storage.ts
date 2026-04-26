@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 import { generateId } from './id';
-import { fileToOptimizedJpegBlob } from './image';
+import { fileToOptimizedDataUrl, fileToOptimizedJpegBlob } from './image';
 
 export const PHOTO_BUCKET = 'medicore-photos';
 
@@ -54,6 +54,35 @@ export async function uploadImageToStorage(
 
   const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(objectPath);
   return data.publicUrl;
+}
+
+export async function saveImageWithFallback(
+  file: File,
+  folder: 'caregivers' | 'patients' | 'medications'
+): Promise<{ photo: string; storedInCloud: boolean; warning?: string }> {
+  try {
+    const photo = await uploadImageToStorage(file, folder);
+    return { photo, storedInCloud: true };
+  } catch (error) {
+    console.warn('Falling back to local photo storage', error);
+
+    const photo = await fileToOptimizedDataUrl(file, {
+      maxDimension: folder === 'caregivers' ? 720 : 960,
+      quality: 0.72,
+      mimeType: 'image/jpeg',
+    });
+
+    const warning =
+      error instanceof Error
+        ? `${error.message} The photo was saved locally on this device instead.`
+        : 'Cloud photo upload failed. The photo was saved locally on this device instead.';
+
+    return {
+      photo,
+      storedInCloud: false,
+      warning,
+    };
+  }
 }
 
 export async function removeImageFromStorage(photoUrl?: string | null): Promise<void> {

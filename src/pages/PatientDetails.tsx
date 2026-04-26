@@ -24,8 +24,8 @@ import { useAuthStore } from '../store/authStore';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { format } from 'date-fns';
 import { deletePatientCloud, scheduleCaregiverSync } from '../lib/sync';
-import { fileToOptimizedDataUrl } from '../lib/image';
-import { removeImageFromStorage, uploadImageToStorage } from '../lib/storage';
+import { fileToOptimizedDataUrl, IMAGE_FILE_ACCEPT } from '../lib/image';
+import { removeImageFromStorage, saveImageWithFallback } from '../lib/storage';
 import { sanitizePatientInput } from '../lib/validation';
 
 export default function PatientDetails() {
@@ -130,9 +130,12 @@ export default function PatientDetails() {
       const sanitized = sanitizePatientInput(editForm);
       const existingPhoto = patient?.photo;
       let finalPhoto = sanitized.photo;
+      let photoWarning = '';
 
       if (photoFile) {
-        finalPhoto = await uploadImageToStorage(photoFile, 'patients');
+        const storedPhoto = await saveImageWithFallback(photoFile, 'patients');
+        finalPhoto = storedPhoto.photo;
+        photoWarning = storedPhoto.warning || '';
       }
 
       await db.patients.update(id, {
@@ -147,7 +150,7 @@ export default function PatientDetails() {
       setPhotoFile(null);
       setIsEditing(false);
       navigate(`/caregiver/patient/${id}`, { replace: true });
-      toast.success('Patient details updated');
+      toast.success(photoWarning || 'Patient details updated');
       scheduleCaregiverSync(caregiverId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update patient details';
@@ -323,7 +326,7 @@ export default function PatientDetails() {
                       ref={fileInputRef}
                       onChange={handlePhotoUpload}
                       className="hidden"
-                      accept="image/*"
+                      accept={IMAGE_FILE_ACCEPT}
                     />
                   </div>
                   <div className="min-w-0">

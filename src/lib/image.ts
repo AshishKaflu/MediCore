@@ -1,5 +1,68 @@
 const DEFAULT_MAX_DIMENSION = 1280;
 const DEFAULT_QUALITY = 0.72;
+export const IMAGE_FILE_ACCEPT =
+  'image/*,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif';
+
+type DecodedImage = {
+  width: number;
+  height: number;
+  close: () => void;
+  draw: (context: CanvasRenderingContext2D, width: number, height: number) => void;
+};
+
+function buildUnsupportedImageError(file: File): Error {
+  const extension = file.name.includes('.') ? file.name.split('.').pop()?.toUpperCase() : '';
+  const label = extension || file.type || 'this image';
+
+  return new Error(
+    `This browser could not read ${label}. JPG, JPEG, PNG, WEBP, and AVIF should work. HEIC/HEIF depends on browser support and may need conversion on some devices.`
+  );
+}
+
+async function decodeWithImageBitmap(file: File): Promise<DecodedImage> {
+  const bitmap = await createImageBitmap(file);
+  return {
+    width: bitmap.width,
+    height: bitmap.height,
+    close: () => bitmap.close(),
+    draw: (context, width, height) => context.drawImage(bitmap, 0, 0, width, height),
+  };
+}
+
+async function decodeWithHtmlImage(file: File): Promise<DecodedImage> {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('Image element could not decode file'));
+      img.src = objectUrl;
+    });
+
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      close: () => URL.revokeObjectURL(objectUrl),
+      draw: (context, width, height) => context.drawImage(image, 0, 0, width, height),
+    };
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
+
+async function decodeImageFile(file: File): Promise<DecodedImage> {
+  try {
+    return await decodeWithImageBitmap(file);
+  } catch {
+    try {
+      return await decodeWithHtmlImage(file);
+    } catch {
+      throw buildUnsupportedImageError(file);
+    }
+  }
+}
 
 async function fileToOptimizedBlob(
   file: File,
@@ -13,10 +76,10 @@ async function fileToOptimizedBlob(
   const quality = options?.quality ?? DEFAULT_QUALITY;
   const mimeType = options?.mimeType ?? 'image/jpeg';
 
-  const bitmap = await createImageBitmap(file);
+  const image = await decodeImageFile(file);
 
-  let width = bitmap.width;
-  let height = bitmap.height;
+  let width = image.width;
+  let height = image.height;
   const largestDimension = Math.max(width, height);
 
   if (largestDimension > maxDimension) {
@@ -31,12 +94,12 @@ async function fileToOptimizedBlob(
 
   const context = canvas.getContext('2d');
   if (!context) {
-    bitmap.close();
+    image.close();
     throw new Error('Could not prepare image for upload');
   }
 
-  context.drawImage(bitmap, 0, 0, width, height);
-  bitmap.close();
+  image.draw(context, width, height);
+  image.close();
 
   const blob = await new Promise<Blob | null>((resolve) =>
     canvas.toBlob(resolve, mimeType, quality)

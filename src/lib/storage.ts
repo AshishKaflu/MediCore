@@ -12,6 +12,23 @@ export function isStorageUrl(value?: string | null): boolean {
   return Boolean(value && value.includes(`/storage/v1/object/public/${PHOTO_BUCKET}/`));
 }
 
+function mapStorageUploadError(error: { message?: string; statusCode?: string | number } | null): Error {
+  const rawMessage = String(error?.message || '').toLowerCase();
+  const rawStatus = String(error?.statusCode || '').toLowerCase();
+
+  if (
+    rawMessage.includes('bucket not found') ||
+    rawMessage.includes('not found') ||
+    rawStatus === '404'
+  ) {
+    return new Error(
+      `Photo storage is not configured. Create the "${PHOTO_BUCKET}" Supabase storage bucket or rerun the updated supabase_schema.sql setup.`
+    );
+  }
+
+  return new Error(error?.message || 'Failed to upload image');
+}
+
 export async function uploadImageToStorage(
   file: File,
   folder: 'caregivers' | 'patients' | 'medications'
@@ -32,7 +49,7 @@ export async function uploadImageToStorage(
   });
 
   if (error) {
-    throw error;
+    throw mapStorageUploadError(error);
   }
 
   const { data } = supabase.storage.from(PHOTO_BUCKET).getPublicUrl(objectPath);

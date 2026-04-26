@@ -244,11 +244,10 @@ export default function PatientDetails() {
   };
 
   const handleBack = () => {
-    if (isEditing && id) {
-      navigate(`/caregiver/patient/${id}`);
-      return;
-    }
-    navigate(-1);
+    // The patient detail/edit flow swaps between two URLs for the same record,
+    // which makes browser-history back feel like a loop. Send the header back
+    // action to the dashboard directly so it behaves predictably.
+    navigate('/caregiver');
   };
 
   if (patient === undefined) return <div className="p-6">Loading...</div>;

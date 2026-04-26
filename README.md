@@ -144,6 +144,12 @@ Because the application uses client-side routing, production hosting should be c
 
 The repository includes [supabase_schema.sql](/Users/ashishkafle/Desktop/medmanage_-caregiver-portal/supabase_schema.sql:1) for provisioning the expected Supabase schema.
 
+That setup now also provisions the public Supabase Storage bucket used for caregiver, patient, and medication photos:
+
+- Bucket: `medicore-photos`
+
+If image upload shows `bucket not found`, rerun `supabase_schema.sql` in the Supabase SQL editor for the target project so the storage bucket and policies are created.
+
 ## Status
 
 MediCore is currently structured as a frontend-first application suitable for prototype, pilot, or staged production hardening workflows. Before production use in a regulated environment, review authentication, authorization, secret handling, auditability, and compliance requirements in the context of your deployment target.

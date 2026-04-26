@@ -283,7 +283,16 @@ export default function PatientDashboard() {
       });
     });
 
-    return [...groups.values()].sort((a, b) => a.order - b.order);
+    return [...groups.values()]
+      .map((group) => ({
+        ...group,
+        items: [...group.items].sort((a, b) => {
+          const aSec = timeToSeconds(a.time.length === 5 ? `${a.time}:00` : a.time) ?? 0;
+          const bSec = timeToSeconds(b.time.length === 5 ? `${b.time}:00` : b.time) ?? 0;
+          return aSec - bSec;
+        }),
+      }))
+      .sort((a, b) => a.order - b.order);
   }, [visibleItems]);
   const timelineSections = useMemo(() => {
     const groupMap = new Map<string, ScheduleGroup>(groupedVisibleItems.map((group) => [group.key, group]));

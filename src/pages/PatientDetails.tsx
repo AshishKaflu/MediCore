@@ -32,8 +32,12 @@ function formatMedicationSchedule(med: { schedule_labels?: string; timing?: stri
   const labelMap: Record<string, string> = {
     before_breakfast: 'Before Breakfast',
     after_breakfast: 'After Breakfast',
-    lunch: 'Lunch',
-    dinner: 'Dinner',
+    before_lunch: 'Before Lunch',
+    after_lunch: 'After Lunch',
+    before_snacks: 'Before Snacks',
+    after_snacks: 'After Snacks',
+    before_dinner: 'Before Dinner',
+    after_dinner: 'After Dinner',
   };
 
   const labels = (med.schedule_labels || '')

@@ -51,6 +51,22 @@ export default function PatientDashboard() {
     return format(date, 'h:mm a');
   };
 
+  const formatScheduleLabel = (value?: string): string => {
+    const labelMap: Record<string, string> = {
+      before_breakfast: 'Before Breakfast',
+      after_breakfast: 'After Breakfast',
+      before_lunch: 'Before Lunch',
+      after_lunch: 'After Lunch',
+      before_snacks: 'Before Snacks',
+      after_snacks: 'After Snacks',
+      before_dinner: 'Before Dinner',
+      after_dinner: 'After Dinner',
+    };
+
+    if (!value) return '';
+    return labelMap[value] || value;
+  };
+
   // Keep time updated every second
   useEffect(() => {
     const timer = setInterval(() => {
@@ -95,6 +111,7 @@ export default function PatientDashboard() {
       }
 
       const times = med.timing ? med.timing.split(',').map(t => t.trim()).filter(Boolean) : ['08:00'];
+      const scheduleLabels = med.schedule_labels ? med.schedule_labels.split(',').map((value: string) => value.trim()).filter(Boolean) : [];
       times.forEach((time, index) => {
         const doseId = `${med.id}-${index}`;
         const takenLog = logs.find(
@@ -126,6 +143,7 @@ export default function PatientDashboard() {
           dosage: med.dosage,
           type: med.type,
           time,
+          scheduleLabel: scheduleLabels[index] || '',
           photo: med.photo,
           status,
           logId: takenLog?.id,
@@ -295,6 +313,11 @@ export default function PatientDashboard() {
                   <p className="text-[12px] text-[#606C38] opacity-80 font-bold truncate">
                     {med.dosage}{med.type ? ` • ${med.type}` : ''}
                   </p>
+                  {med.scheduleLabel ? (
+                    <div className="mt-2 inline-flex items-center rounded-full bg-[#F2F0E4] border border-[#E5E1D8] px-2.5 py-1 text-[11px] font-bold text-[#606C38]">
+                      {formatScheduleLabel(med.scheduleLabel)}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="flex items-center justify-end gap-1 text-[12px] font-bold text-[#606C38] opacity-80">

@@ -15,8 +15,12 @@ import { sanitizeMedicationInput } from '../lib/validation';
 const MEDICATION_SCHEDULE_OPTIONS = [
   { value: 'before_breakfast', label: 'Before Breakfast', time: '07:00' },
   { value: 'after_breakfast', label: 'After Breakfast', time: '09:00' },
-  { value: 'lunch', label: 'Lunch', time: '13:00' },
-  { value: 'dinner', label: 'Dinner', time: '19:00' },
+  { value: 'before_lunch', label: 'Before Lunch', time: '12:00' },
+  { value: 'after_lunch', label: 'After Lunch', time: '14:00' },
+  { value: 'before_snacks', label: 'Before Snacks', time: '16:00' },
+  { value: 'after_snacks', label: 'After Snacks', time: '17:00' },
+  { value: 'before_dinner', label: 'Before Dinner', time: '18:30' },
+  { value: 'after_dinner', label: 'After Dinner', time: '20:30' },
 ] as const;
 
 const scheduleLabelByValue = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.value, option.label]));

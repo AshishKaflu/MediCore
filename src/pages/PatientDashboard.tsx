@@ -12,6 +12,17 @@ import { refreshPatientData, schedulePatientSync, deleteMedicationLogCloud } fro
 import { generateId } from '../lib/id';
 import { ImageLightbox } from '../components/ImageLightbox';
 
+type ScheduleGroup = {
+  key: string;
+  label: string;
+  items: any[];
+  order: number;
+};
+
+type TimelineSection =
+  | { type: 'group'; key: string; label: string; items: any[] }
+  | { type: 'divider'; key: string; label: string };
+
 export default function PatientDashboard() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -252,7 +263,7 @@ export default function PatientDashboard() {
 
   const visibleItems = filteredByStatus[statusTab];
   const groupedVisibleItems = useMemo(() => {
-    const groups = new Map<string, { key: string; label: string; items: any[]; order: number }>();
+    const groups = new Map<string, ScheduleGroup>();
 
     visibleItems.forEach((item) => {
       const key = item.scheduleLabel || 'unscheduled';
@@ -274,6 +285,77 @@ export default function PatientDashboard() {
 
     return [...groups.values()].sort((a, b) => a.order - b.order);
   }, [visibleItems]);
+  const timelineSections = useMemo(() => {
+    const groupMap = new Map<string, ScheduleGroup>(groupedVisibleItems.map((group) => [group.key, group]));
+    const hasAnyForMeal = (keys: string[]) => keys.some((key) => groupMap.has(key));
+    const sections: TimelineSection[] = [];
+
+    const orderedMeals = [
+      {
+        before: 'before_breakfast',
+        divider: 'BREAKFAST',
+        after: 'after_breakfast',
+      },
+      {
+        before: 'before_lunch',
+        divider: 'LUNCH',
+        after: 'after_lunch',
+      },
+      {
+        before: 'before_snacks',
+        divider: 'SNACKS',
+        after: 'after_snacks',
+      },
+      {
+        before: 'before_dinner',
+        divider: 'DINNER',
+        after: 'after_dinner',
+      },
+    ] as const;
+
+    orderedMeals.forEach((meal) => {
+      const keys = [meal.before, meal.after];
+      if (!hasAnyForMeal(keys)) return;
+
+      const beforeGroup = groupMap.get(meal.before);
+      if (beforeGroup) {
+        sections.push({
+          type: 'group',
+          key: beforeGroup.key,
+          label: beforeGroup.label,
+          items: beforeGroup.items,
+        });
+      }
+
+      sections.push({
+        type: 'divider',
+        key: meal.divider.toLowerCase(),
+        label: meal.divider,
+      });
+
+      const afterGroup = groupMap.get(meal.after);
+      if (afterGroup) {
+        sections.push({
+          type: 'group',
+          key: afterGroup.key,
+          label: afterGroup.label,
+          items: afterGroup.items,
+        });
+      }
+    });
+
+    const unscheduled = groupMap.get('unscheduled');
+    if (unscheduled) {
+      sections.push({
+        type: 'group',
+        key: unscheduled.key,
+        label: unscheduled.label,
+        items: unscheduled.items,
+      });
+    }
+
+    return sections;
+  }, [groupedVisibleItems]);
 
   const getRelativeTime = (medTime: string, isOverdue: boolean) => {
     const [nowH, nowM, nowS = 0] = currentTime.split(':').map(Number);
@@ -554,7 +636,7 @@ export default function PatientDashboard() {
 
 	          <div className="space-y-3">
 	            <AnimatePresence>
-	              {groupedVisibleItems.length === 0 ? (
+	              {timelineSections.length === 0 ? (
 	                <motion.div
 	                  key={`${statusTab}-empty`}
 	                  initial={{ opacity: 0, y: 10 }}
@@ -579,27 +661,44 @@ export default function PatientDashboard() {
 	                  </p>
 	                </motion.div>
 	              ) : (
-	                groupedVisibleItems.map((group) => (
-                    <motion.div
-                      key={`${statusTab}-${group.key}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-white rounded-[26px] border border-[#E5E1D8] shadow-sm overflow-hidden"
-                    >
-                      <div className="px-4 py-3 border-b border-[#EEE6D7] bg-[#F9F6EE] flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#606C38] opacity-70">Meal block</p>
-                          <h3 className="text-sm font-bold text-[#283618] mt-1">{group.label}</h3>
+	                timelineSections.map((section) =>
+                    section.type === 'divider' ? (
+                      <motion.div
+                        key={`${statusTab}-${section.key}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="px-1 py-2"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="h-px flex-1 bg-[#D8D1C3]" />
+                          <div className="rounded-full bg-[#283618] px-4 py-1.5 text-[11px] font-bold tracking-[0.28em] text-white">
+                            {section.label}
+                          </div>
+                          <div className="h-px flex-1 bg-[#D8D1C3]" />
                         </div>
-                        <div className="rounded-full bg-white border border-[#E5E1D8] px-2.5 py-1 text-[11px] font-bold text-[#606C38]">
-                          {group.items.length}
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key={`${statusTab}-${section.key}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-[26px] border border-[#E5E1D8] shadow-sm overflow-hidden"
+                      >
+                        <div className="px-4 py-3 border-b border-[#EEE6D7] bg-[#F9F6EE] flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#606C38] opacity-70">Meal block</p>
+                            <h3 className="text-sm font-bold text-[#283618] mt-1">{section.label}</h3>
+                          </div>
+                          <div className="rounded-full bg-white border border-[#E5E1D8] px-2.5 py-1 text-[11px] font-bold text-[#606C38]">
+                            {section.items.length}
+                          </div>
                         </div>
-                      </div>
-                      <div className="p-3 space-y-3">
-                        {group.items.map((med) => renderMedCard(med, statusTab))}
-                      </div>
-                    </motion.div>
-                  ))
+                        <div className="p-3 space-y-3">
+                          {section.items.map((med) => renderMedCard(med, statusTab))}
+                        </div>
+                      </motion.div>
+                    )
+                  )
 	              )}
 	            </AnimatePresence>
 	          </div>

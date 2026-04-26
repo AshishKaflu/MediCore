@@ -67,6 +67,21 @@ export default function PatientDashboard() {
     return labelMap[value] || value;
   };
 
+  const getScheduleOrder = (value?: string): number => {
+    const order: Record<string, number> = {
+      before_breakfast: 1,
+      after_breakfast: 2,
+      before_lunch: 3,
+      after_lunch: 4,
+      before_snacks: 5,
+      after_snacks: 6,
+      before_dinner: 7,
+      after_dinner: 8,
+    };
+
+    return value ? (order[value] ?? 99) : 99;
+  };
+
   // Keep time updated every second
   useEffect(() => {
     const timer = setInterval(() => {
@@ -236,6 +251,29 @@ export default function PatientDashboard() {
   }, [viewingSchedule]);
 
   const visibleItems = filteredByStatus[statusTab];
+  const groupedVisibleItems = useMemo(() => {
+    const groups = new Map<string, { key: string; label: string; items: any[]; order: number }>();
+
+    visibleItems.forEach((item) => {
+      const key = item.scheduleLabel || 'unscheduled';
+      const label = item.scheduleLabel ? formatScheduleLabel(item.scheduleLabel) : 'Other';
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.items.push(item);
+        return;
+      }
+
+      groups.set(key, {
+        key,
+        label,
+        items: [item],
+        order: getScheduleOrder(item.scheduleLabel),
+      });
+    });
+
+    return [...groups.values()].sort((a, b) => a.order - b.order);
+  }, [visibleItems]);
 
   const getRelativeTime = (medTime: string, isOverdue: boolean) => {
     const [nowH, nowM, nowS = 0] = currentTime.split(':').map(Number);
@@ -289,7 +327,7 @@ export default function PatientDashboard() {
         layout
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`rounded-[28px] p-4 shadow-sm border ${containerClass}`}
+        className={`rounded-[22px] p-4 shadow-sm border ${containerClass}`}
       >
         <div className="flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
@@ -344,7 +382,7 @@ export default function PatientDashboard() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className={`rounded-2xl border px-3 py-3 ${scheduleBadgeClass}`}>
-              <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">Meal timing</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">Meal block</p>
               <p className="mt-1 text-sm font-bold">
                 {med.scheduleLabel ? formatScheduleLabel(med.scheduleLabel) : 'Scheduled dose'}
               </p>
@@ -422,7 +460,7 @@ export default function PatientDashboard() {
 
       <div className="p-6 -mt-6">
         <div className="flex items-end justify-between mb-3 ml-2 mr-2">
-          <h2 className="text-base font-bold">Schedule</h2>
+          <h2 className="text-base font-bold">Today&apos;s Schedule</h2>
           <p className="text-[12px] font-bold text-[#606C38] opacity-70">
             {isViewingToday ? 'Today' : format(viewingDate, 'EEE, MMM d')}
           </p>
@@ -430,14 +468,13 @@ export default function PatientDashboard() {
 	        
 	        <div className="space-y-3">
           {/* Day selector */}
-          <div className="bg-white rounded-3xl p-3 border border-[#E5E1D8] shadow-sm">
-            <p className="text-[10px] font-bold text-[#606C38] mb-2 uppercase tracking-wider">Day</p>
+          <div className="bg-white rounded-[24px] px-3 py-2.5 border border-[#E5E1D8] shadow-sm">
             <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setDayOffset((prev) => Math.max(-3, prev - 1))}
                 disabled={dayOffset <= -3}
-                className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition ${
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center transition ${
                   dayOffset <= -3
                     ? 'bg-[#E5E1D8] text-[#606C38] opacity-50 cursor-not-allowed'
                     : 'bg-[#F2F0E4] text-[#606C38] border-[#E5E1D8] hover:bg-[#E5E1D8]'
@@ -448,10 +485,10 @@ export default function PatientDashboard() {
               </button>
 
               <div className="flex flex-col items-center justify-center flex-1 min-w-0">
-                <p className="text-sm font-bold text-[#283618] truncate">
+                <p className="text-sm font-bold text-[#283618] truncate leading-tight">
                   {isViewingToday ? 'Today' : format(viewingDate, 'EEEE')}
                 </p>
-                <p className="text-[12px] font-bold text-[#606C38] opacity-70 truncate">
+                <p className="text-[11px] font-bold text-[#606C38] opacity-70 truncate">
                   {format(viewingDate, 'MMM d')}
                 </p>
               </div>
@@ -460,7 +497,7 @@ export default function PatientDashboard() {
                 type="button"
                 onClick={() => setDayOffset((prev) => Math.min(3, prev + 1))}
                 disabled={dayOffset >= 3}
-                className={`w-10 h-10 rounded-2xl border flex items-center justify-center transition ${
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center transition ${
                   dayOffset >= 3
                     ? 'bg-[#E5E1D8] text-[#606C38] opacity-50 cursor-not-allowed'
                     : 'bg-[#F2F0E4] text-[#606C38] border-[#E5E1D8] hover:bg-[#E5E1D8]'
@@ -469,17 +506,11 @@ export default function PatientDashboard() {
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
-            </div>
-
-            <div className="mt-2 flex items-center justify-between">
-              <p className="text-[10px] font-bold text-[#606C38] opacity-60">
-                {!isViewingToday ? 'View only' : 'Editable'}
-              </p>
               <button
                 type="button"
                 onClick={() => setDayOffset(0)}
                 disabled={dayOffset === 0}
-                className={`text-[10px] font-bold px-3 py-1.5 rounded-xl border transition ${
+                className={`text-[10px] font-bold px-3 py-1.5 rounded-xl border transition shrink-0 ${
                   dayOffset === 0
                     ? 'bg-[#E5E1D8] text-[#606C38] opacity-60 cursor-not-allowed'
                     : 'bg-white text-[#606C38] border-[#E5E1D8] hover:bg-[#F2F0E4]'
@@ -495,10 +526,10 @@ export default function PatientDashboard() {
               </p>
             )}
           </div>
-	
+
 	          {/* Filters */}
-	          <div className="bg-white rounded-3xl p-3 border border-[#E5E1D8] shadow-sm">
-	            <p className="text-[10px] font-bold text-[#606C38] mb-1.5 uppercase tracking-wider">Status</p>
+	          <div className="bg-white rounded-[24px] p-3 border border-[#E5E1D8] shadow-sm">
+	            <p className="text-[10px] font-bold text-[#606C38] mb-1.5 uppercase tracking-wider">View</p>
 	            <div className="flex bg-[#F2F0E4] border border-[#E5E1D8] p-1 rounded-2xl">
 	                <button
 	                  onClick={() => setStatusTab('overdue')}
@@ -520,10 +551,10 @@ export default function PatientDashboard() {
 	                </button>
 	              </div>
 	          </div>
-	
+
 	          <div className="space-y-3">
 	            <AnimatePresence>
-	              {visibleItems.length === 0 ? (
+	              {groupedVisibleItems.length === 0 ? (
 	                <motion.div
 	                  key={`${statusTab}-empty`}
 	                  initial={{ opacity: 0, y: 10 }}
@@ -544,11 +575,31 @@ export default function PatientDashboard() {
 	                      ? 'Ask your caregiver if something looks missing.'
 	                      : statusTab === 'overdue'
 	                        ? "You're all caught up."
-	                        : 'Check another tab to see this day’s schedule.'}
+	                      : 'Check another tab to see this day’s schedule.'}
 	                  </p>
 	                </motion.div>
 	              ) : (
-	                visibleItems.map((med) => renderMedCard(med, statusTab))
+	                groupedVisibleItems.map((group) => (
+                    <motion.div
+                      key={`${statusTab}-${group.key}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white rounded-[26px] border border-[#E5E1D8] shadow-sm overflow-hidden"
+                    >
+                      <div className="px-4 py-3 border-b border-[#EEE6D7] bg-[#F9F6EE] flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#606C38] opacity-70">Meal block</p>
+                          <h3 className="text-sm font-bold text-[#283618] mt-1">{group.label}</h3>
+                        </div>
+                        <div className="rounded-full bg-white border border-[#E5E1D8] px-2.5 py-1 text-[11px] font-bold text-[#606C38]">
+                          {group.items.length}
+                        </div>
+                      </div>
+                      <div className="p-3 space-y-3">
+                        {group.items.map((med) => renderMedCard(med, statusTab))}
+                      </div>
+                    </motion.div>
+                  ))
 	              )}
 	            </AnimatePresence>
 	          </div>

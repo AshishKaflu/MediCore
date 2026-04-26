@@ -13,19 +13,27 @@ import { removeImageFromStorage, saveImageWithFallback } from '../lib/storage';
 import { sanitizeMedicationInput } from '../lib/validation';
 
 const MEDICATION_SCHEDULE_OPTIONS = [
-  { value: 'before_breakfast', label: 'Before Breakfast', time: '07:00' },
-  { value: 'after_breakfast', label: 'After Breakfast', time: '09:00' },
-  { value: 'before_lunch', label: 'Before Lunch', time: '12:00' },
-  { value: 'after_lunch', label: 'After Lunch', time: '14:00' },
-  { value: 'before_snacks', label: 'Before Snacks', time: '16:00' },
-  { value: 'after_snacks', label: 'After Snacks', time: '17:00' },
-  { value: 'before_dinner', label: 'Before Dinner', time: '18:30' },
-  { value: 'after_dinner', label: 'After Dinner', time: '20:30' },
+  { value: 'before_breakfast', label: 'Before Breakfast' },
+  { value: 'after_breakfast', label: 'After Breakfast' },
+  { value: 'before_lunch', label: 'Before Lunch' },
+  { value: 'after_lunch', label: 'After Lunch' },
+  { value: 'before_snacks', label: 'Before Snacks' },
+  { value: 'after_snacks', label: 'After Snacks' },
+  { value: 'before_dinner', label: 'Before Dinner' },
+  { value: 'after_dinner', label: 'After Dinner' },
 ] as const;
 
 const scheduleLabelByValue = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.value, option.label]));
-const scheduleTimeByValue = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.value, option.time]));
-const scheduleValueByTime = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.time, option.value]));
+const scheduleValueByLegacyTime = new Map<string, string>([
+  ['07:00', 'before_breakfast'],
+  ['09:00', 'after_breakfast'],
+  ['12:00', 'before_lunch'],
+  ['14:00', 'after_lunch'],
+  ['16:00', 'before_snacks'],
+  ['17:00', 'after_snacks'],
+  ['18:30', 'before_dinner'],
+  ['20:30', 'after_dinner'],
+]);
 
 export default function MedicationForm() {
   const { id: patientId, medId } = useParams();
@@ -39,9 +47,9 @@ export default function MedicationForm() {
   const [type, setType] = useState('tablet');
   const [interval, setIntervalVal] = useState<'daily'|'alternate'|'x_days'>('daily');
   const [intervalDays, setIntervalDays] = useState(3);
-  const [scheduleLabels, setScheduleLabels] = useState<string[]>(['before_breakfast']);
+  const [scheduleLabels, setScheduleLabels] = useState<string[]>([]);
   const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [timings, setTimings] = useState<string[]>(['08:00']);
+  const [timings, setTimings] = useState<string[]>([]);
   const [inventoryCount, setInventoryCount] = useState(30);
   const [refillReminderAt, setRefillReminderAt] = useState(5);
   const [photo, setPhoto] = useState<string>('');
@@ -73,17 +81,20 @@ export default function MedicationForm() {
           if (med.interval_days) setIntervalDays(med.interval_days);
           if (med.start_date) setStartDate(med.start_date);
           else if (med.created_at) setStartDate(format(new Date(med.created_at), 'yyyy-MM-dd'));
-          if (med.schedule_labels) {
-            const labels = med.schedule_labels.split(',').map((value) => value.trim()).filter(Boolean);
-            if (labels.length > 0) {
-              setScheduleLabels(labels);
-              setTimings(labels.map((value) => scheduleTimeByValue.get(value) || '08:00'));
-            }
-          } else if (med.timing) {
-            const storedTimings = med.timing.split(',').map((value) => value.trim()).filter(Boolean);
+          const storedLabels = med.schedule_labels
+            ? med.schedule_labels.split(',').map((value) => value.trim()).filter(Boolean)
+            : [];
+          const storedTimings = med.timing
+            ? med.timing.split(',').map((value) => value.trim()).filter(Boolean)
+            : [];
+
+          if (storedLabels.length > 0) {
+            setScheduleLabels(storedLabels);
+            setTimings(storedLabels.map((_, index) => storedTimings[index] || ''));
+          } else if (storedTimings.length > 0) {
             setTimings(storedTimings);
             const inferredLabels = storedTimings
-              .map((time) => scheduleValueByTime.get(time) || '')
+              .map((time) => scheduleValueByLegacyTime.get(time) || '')
               .filter(Boolean);
             if (inferredLabels.length > 0) setScheduleLabels(inferredLabels);
           }
@@ -111,12 +122,28 @@ export default function MedicationForm() {
   };
 
   const toggleScheduleLabel = (value: string) => {
-    const nextLabels = scheduleLabels.includes(value)
-      ? scheduleLabels.filter((label) => label !== value)
-      : [...scheduleLabels, value];
+    const existingIndex = scheduleLabels.indexOf(value);
+    if (existingIndex >= 0) {
+      setScheduleLabels(scheduleLabels.filter((label) => label !== value));
+      setTimings(timings.filter((_, index) => index !== existingIndex));
+      return;
+    }
 
-    setScheduleLabels(nextLabels);
-    setTimings(nextLabels.map((label) => scheduleTimeByValue.get(label) || '08:00'));
+    const optionOrder = new Map(MEDICATION_SCHEDULE_OPTIONS.map((option, index) => [option.value, index]));
+    const nextEntries = [...scheduleLabels.map((label, index) => ({ label, time: timings[index] || '' })), { label: value, time: '' }]
+      .sort((a, b) => (optionOrder.get(a.label) ?? 99) - (optionOrder.get(b.label) ?? 99));
+
+    setScheduleLabels(nextEntries.map((entry) => entry.label));
+    setTimings(nextEntries.map((entry) => entry.time));
+  };
+
+  const updateScheduleTime = (value: string, time: string) => {
+    const index = scheduleLabels.indexOf(value);
+    if (index < 0) return;
+
+    const nextTimings = [...timings];
+    nextTimings[index] = time;
+    setTimings(nextTimings);
   };
 
   const handleSave = async () => {
@@ -127,6 +154,14 @@ export default function MedicationForm() {
     }
     if (!startDate) {
       toast.error('Please select a start date');
+      return;
+    }
+    if (scheduleLabels.length === 0) {
+      toast.error('Choose at least one meal routine');
+      return;
+    }
+    if (timings.length !== scheduleLabels.length || timings.some((time) => !time)) {
+      toast.error('Set a time for each selected meal routine');
       return;
     }
 
@@ -345,7 +380,7 @@ export default function MedicationForm() {
           <div>
             <label className="block text-xs font-bold text-[#606C38] mb-1">Meal Routine</label>
             <p className="text-xs text-[#606C38] opacity-70 mb-3">
-              Choose when this medicine should be taken. These options automatically set the schedule used by reminders and tracking.
+              Choose the routine labels that fit this person, then set the actual time for each one.
             </p>
             <div className="grid grid-cols-2 gap-2">
               {MEDICATION_SCHEDULE_OPTIONS.map((option) => {
@@ -363,12 +398,37 @@ export default function MedicationForm() {
                   >
                     <p className="text-sm font-bold">{option.label}</p>
                     <p className={`text-[11px] font-semibold mt-1 ${selected ? 'text-white/80' : 'text-[#606C38] opacity-70'}`}>
-                      Default time {option.time}
+                      {selected ? 'Selected for this patient' : 'Tap to include in schedule'}
                     </p>
                   </button>
                 );
               })}
             </div>
+            {scheduleLabels.length > 0 && (
+              <div className="mt-4 space-y-3">
+                {scheduleLabels.map((value, index) => (
+                  <div
+                    key={value}
+                    className="rounded-2xl border border-[#E5E1D8] bg-[#FBFBF8] px-4 py-3 flex items-center justify-between gap-4"
+                  >
+                    <div>
+                      <p className="text-sm font-bold text-[#283618]">
+                        {scheduleLabelByValue.get(value) || value}
+                      </p>
+                      <p className="text-xs text-[#606C38] opacity-70">
+                        Set the real time for this patient
+                      </p>
+                    </div>
+                    <input
+                      type="time"
+                      value={timings[index] || ''}
+                      onChange={(e) => updateScheduleTime(value, e.target.value)}
+                      className="w-28 text-sm p-2.5 bg-white border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="mt-3 rounded-2xl border border-[#E5E1D8] bg-[#F8F5ED] px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-[#606C38] opacity-70">Selected schedule</p>
               <p className="mt-1 text-sm font-bold text-[#283618]">
@@ -377,7 +437,9 @@ export default function MedicationForm() {
                   : 'Select at least one meal routine'}
               </p>
               <p className="mt-1 text-xs text-[#606C38] opacity-75">
-                {timings.length > 0 ? timings.join(', ') : 'No reminder times generated yet'}
+                {timings.length > 0 && timings.some(Boolean)
+                  ? timings.map((time, index) => `${scheduleLabelByValue.get(scheduleLabels[index]) || scheduleLabels[index]} at ${time || 'Not set'}`).join(' • ')
+                  : 'No times set yet'}
               </p>
             </div>
           </div>

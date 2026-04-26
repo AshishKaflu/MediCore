@@ -14,6 +14,10 @@ import {
   Camera,
   Archive,
   Trash2,
+  ShieldCheck,
+  KeyRound,
+  NotebookPen,
+  UserRound,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '../store/authStore';
@@ -67,6 +71,13 @@ export default function PatientDetails() {
   }, [logs]);
 
   const medNameById = useMemo(() => new Map(medications.map((m) => [m.id, m.name])), [medications]);
+  const patientDisplayName = useMemo(() => {
+    if (!patient) return 'Patient';
+    return `${patient.designation ? `${patient.designation} ` : ''}${patient.first_name} ${patient.last_name}`.trim() || 'Patient';
+  }, [patient]);
+  const draftDisplayName = useMemo(() => {
+    return `${editForm.designation ? `${editForm.designation} ` : ''}${editForm.first_name} ${editForm.last_name}`.trim() || 'New patient';
+  }, [editForm.designation, editForm.first_name, editForm.last_name]);
 
   useEffect(() => {
     setIsEditing(initEdit);
@@ -232,6 +243,14 @@ export default function PatientDetails() {
     setRefillAmount(30);
   };
 
+  const handleBack = () => {
+    if (isEditing && id) {
+      navigate(`/caregiver/patient/${id}`);
+      return;
+    }
+    navigate(-1);
+  };
+
   if (patient === undefined) return <div className="p-6">Loading...</div>;
   if (patient === null) {
     return (
@@ -258,14 +277,13 @@ export default function PatientDetails() {
     <div className="min-h-screen max-w-lg mx-auto bg-[#FBFBF8] pb-24 text-[#283618] font-sans">
       <div className="bg-white p-6 pt-12 pb-6 shadow-sm border-b border-[#E5E1D8] flex items-center justify-between sticky top-0 z-10">
         <button
-          onClick={() => navigate(isEditing && id ? `/caregiver/patient/${id}` : -1)}
+          onClick={handleBack}
           className="w-10 h-10 border border-[#E5E1D8] bg-[#F2F0E4] rounded-full flex items-center justify-center hover:bg-[#E5E1D8] transition text-[#606C38]"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
         <h1 className="text-lg font-bold tracking-tight truncate flex-1 text-center px-4">
-          {patient.designation ? `${patient.designation} ` : ''}
-          {patient.first_name} {patient.last_name}
+          {patientDisplayName}
         </h1>
         {isEditing ? (
           <div className="w-10 h-10" />
@@ -281,148 +299,208 @@ export default function PatientDetails() {
 
       <div className="p-6 space-y-6">
         {isEditing ? (
-          <div className="bg-white rounded-[32px] border border-[#E5E1D8] p-6 shadow-sm space-y-4">
-            <h2 className="text-sm font-bold flex items-center justify-between mb-4">
-              {isNewUser ? 'Add New Patient' : 'Edit Patient Details'}
-            </h2>
-
-            <div className="flex flex-col items-center mb-6">
-              <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                {editForm.photo ? (
-                  <img
-                    src={editForm.photo}
-                    alt="Profile"
-                    className="h-20 w-20 rounded-2xl object-cover shadow-sm border-2 border-[#E5E1D8]"
-                  />
-                ) : (
-                  <div className="h-20 w-20 bg-[#DDA15E] text-white rounded-2xl flex items-center justify-center text-3xl font-bold shadow-sm border-2 border-[#E5E1D8]">
-                    {editForm.first_name ? editForm.first_name[0] : <Camera className="w-8 h-8 opacity-50" />}
-                  </div>
-                )}
-                <div className="absolute -bottom-2 -right-2 bg-white p-1.5 rounded-full shadow-sm border border-[#E5E1D8] text-[#606C38] group-hover:scale-110 transition">
-                  <Camera className="w-4 h-4" />
-                </div>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                  accept="image/*"
-                />
-              </div>
-              <p className="text-[10px] uppercase font-bold text-[#606C38] opacity-70 mt-3 tracking-wider">
-                Patient Photo
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-[#606C38] mb-1">First Name</label>
-                  <div className="flex gap-2">
-                    <select
-                      value={editForm.designation}
-                      onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
-                      className="w-[72px] shrink-0 text-sm px-2 py-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618] appearance-none"
-                    >
-                      <option value="">-</option>
-                      <option value="Mr.">Mr.</option>
-                      <option value="Mrs.">Mrs.</option>
-                      <option value="Miss">Miss</option>
-                      <option value="Ms.">Ms.</option>
-                      <option value="Mx.">Mx.</option>
-                      <option value="Dr.">Dr.</option>
-                      <option value="Prof.">Prof.</option>
-                      <option value="Er.">Er.</option>
-                    </select>
+          <div className="space-y-4">
+            <div className="bg-[linear-gradient(135deg,#F7F2E8_0%,#EFE9DA_100%)] rounded-[32px] border border-[#E5E1D8] p-6 shadow-sm overflow-hidden relative">
+              <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-[#DDA15E]/20 blur-2xl pointer-events-none" />
+              <div className="relative flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                    {editForm.photo ? (
+                      <img
+                        src={editForm.photo}
+                        alt="Profile"
+                        className="h-20 w-20 rounded-[24px] object-cover shadow-sm border-2 border-white"
+                      />
+                    ) : (
+                      <div className="h-20 w-20 bg-[#DDA15E] text-white rounded-[24px] flex items-center justify-center text-3xl font-bold shadow-sm border-2 border-white">
+                        {editForm.first_name ? editForm.first_name[0] : <Camera className="w-8 h-8 opacity-50" />}
+                      </div>
+                    )}
+                    <div className="absolute -bottom-2 -right-2 bg-white p-1.5 rounded-full shadow-sm border border-[#E5E1D8] text-[#606C38] group-hover:scale-110 transition">
+                      <Camera className="w-4 h-4" />
+                    </div>
                     <input
-                      value={editForm.first_name}
-                      onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                      className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]"
-                      placeholder="First"
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                      accept="image/*"
                     />
                   </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#606C38] opacity-70">
+                      {isNewUser ? 'New patient profile' : 'Editing patient'}
+                    </p>
+                    <h2 className="text-2xl font-bold tracking-tight text-[#283618] mt-2 truncate">{draftDisplayName}</h2>
+                    <p className="text-sm text-[#606C38] opacity-80 mt-2">
+                      Update the essentials first, then save when the profile looks right.
+                    </p>
+                  </div>
+                </div>
+                <div className="hidden sm:flex rounded-2xl bg-white/70 border border-[#E5E1D8] px-3 py-2 text-xs font-bold text-[#606C38]">
+                  Tap photo to change
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[32px] border border-[#E5E1D8] p-6 shadow-sm space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <UserRound className="w-4 h-4 text-[#606C38]" />
+                  <h3 className="text-sm font-bold text-[#283618]">Identity</h3>
+                </div>
+                <p className="text-xs font-semibold text-[#606C38] opacity-70">
+                  Name, title, and date of birth help keep the care record clear across devices.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-[110px_minmax(0,1fr)_minmax(0,1fr)] gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#606C38] mb-1">Title</label>
+                  <select
+                    value={editForm.designation}
+                    onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
+                    className="w-full text-sm px-3 py-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-2xl focus:border-[#606C38] outline-none text-[#283618] appearance-none"
+                  >
+                    <option value="">None</option>
+                    <option value="Mr.">Mr.</option>
+                    <option value="Mrs.">Mrs.</option>
+                    <option value="Miss">Miss</option>
+                    <option value="Ms.">Ms.</option>
+                    <option value="Mx.">Mx.</option>
+                    <option value="Dr.">Dr.</option>
+                    <option value="Prof.">Prof.</option>
+                    <option value="Er.">Er.</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-[#606C38] mb-1">First Name</label>
+                  <input
+                    value={editForm.first_name}
+                    onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                    className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-2xl focus:border-[#606C38] outline-none text-[#283618]"
+                    placeholder="First name"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-[#606C38] mb-1">Last Name</label>
                   <input
                     value={editForm.last_name}
                     onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                    className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]"
-                    placeholder="Last"
+                    className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-2xl focus:border-[#606C38] outline-none text-[#283618]"
+                    placeholder="Last name"
                   />
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-[#606C38] mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={editForm.dob}
+                    onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
+                    className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-2xl focus:border-[#606C38] outline-none text-[#283618]"
+                  />
+                </div>
+                <div className="rounded-[24px] border border-[#E5E1D8] bg-[#F8F5ED] p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#606C38] opacity-70">Profile preview</p>
+                  <p className="mt-2 text-base font-bold text-[#283618]">{draftDisplayName}</p>
+                  <p className="mt-1 text-xs font-semibold text-[#606C38] opacity-75">
+                    {editForm.dob ? `DOB ${format(new Date(editForm.dob), 'MMM d, yyyy')}` : 'Add date of birth if available'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-[#EEE6D7] pt-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <KeyRound className="w-4 h-4 text-[#606C38]" />
+                  <h3 className="text-sm font-bold text-[#283618]">Patient login</h3>
+                </div>
+                <p className="text-xs font-semibold text-[#606C38] opacity-70 mb-4">
+                  This PIN is what the patient uses to access their dashboard on another device.
+                </p>
+                <label className="block text-xs font-bold text-[#606C38] mb-1">Login PIN (4-6 digits)</label>
+                <input
+                  type="text"
+                  pattern="[0-9]*"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={editForm.pin || ''}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      pin: e.target.value.replace(/\D/g, '').slice(0, 6),
+                    })
+                  }
+                  className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-2xl focus:border-[#606C38] outline-none text-[#283618] font-mono tracking-[0.32em]"
+                  placeholder="Set a PIN for the patient"
+                />
+              </div>
+
+              <div className="border-t border-[#EEE6D7] pt-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <NotebookPen className="w-4 h-4 text-[#606C38]" />
+                  <h3 className="text-sm font-bold text-[#283618]">Care notes</h3>
+                </div>
+                <p className="text-xs font-semibold text-[#606C38] opacity-70 mb-4">
+                  Keep instructions, allergies, or reminders in one place for caregivers.
+                </p>
+                <textarea
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  className="w-full text-sm p-4 bg-[#FBFBF8] border border-[#E5E1D8] rounded-[24px] focus:border-[#606C38] outline-none text-[#283618] min-h-[110px]"
+                  placeholder="Allergies, mobility notes, preferred routines, emergency reminders..."
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-[#606C38] mb-1">Date of Birth</label>
-              <input
-                type="date"
-                value={editForm.dob}
-                onChange={(e) => setEditForm({ ...editForm, dob: e.target.value })}
-                className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-[#606C38] mb-1">Login PIN (4-6 Digits)</label>
-              <input
-                type="text"
-                pattern="[0-9]*"
-                inputMode="numeric"
-                maxLength={6}
-                value={editForm.pin || ''}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    pin: e.target.value.replace(/\D/g, '').slice(0, 6),
-                  })
-                }
-                className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618] font-mono tracking-widest"
-                placeholder="Set a PIN for the patient..."
-              />
-              <p className="text-[10px] text-[#606C38] opacity-70 mt-1 font-bold">
-                This PIN is required for the patient to log in.
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-[#606C38] mb-1">Care Notes</label>
-              <textarea
-                value={editForm.notes}
-                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                className="w-full text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618] min-h-[80px]"
-                placeholder="Allergies, specific needs..."
-              />
-            </div>
-            <div className="flex gap-3 mt-4 pt-4 border-t border-[#E5E1D8]">
-              {isConfirmingDelete ? (
-                <button
-                  onClick={handleDeletePatient}
-                  className="py-3 px-4 text-sm font-bold text-white bg-red-600 rounded-xl hover:opacity-90 transition shadow-sm animate-pulse flex-1"
-                >
-                  Sure? Complete Delete
-                </button>
-              ) : (
-                <button
-                  onClick={handleDeletePatient}
-                  className="py-3 px-4 text-sm font-bold text-white bg-[#BC6C25] rounded-xl hover:opacity-90 transition shadow-sm"
-                >
-                  Delete
-                </button>
-              )}
-              <button
-                onClick={handleCancelEdit}
-                className="flex-1 py-3 text-sm font-bold text-[#606C38] bg-[#F2F0E4] rounded-xl hover:bg-[#E5E1D8] transition"
-              >
-                Cancel
-              </button>
-              {!isConfirmingDelete && (
-                <button
-                  onClick={handleSavePatient}
-                  className="flex-1 py-3 text-sm font-bold text-white bg-[#606C38] rounded-xl hover:opacity-90 transition shadow-sm"
-                >
-                  Save
-                </button>
-              )}
+
+            <div className="bg-white rounded-[32px] border border-[#EAD8D5] p-6 shadow-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-sm font-bold text-[#283618]">Save or discard changes</h3>
+                  <p className="text-xs font-semibold text-[#606C38] opacity-70 mt-1">
+                    Saving updates the local record immediately and queues sync for the caregiver account.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 mt-5">
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCancelEdit}
+                    className="flex-1 py-3 text-sm font-bold text-[#606C38] bg-[#F2F0E4] rounded-2xl hover:bg-[#E5E1D8] transition"
+                  >
+                    {isNewUser ? 'Discard draft' : 'Cancel'}
+                  </button>
+                  {!isConfirmingDelete && (
+                    <button
+                      onClick={handleSavePatient}
+                      className="flex-1 py-3 text-sm font-bold text-white bg-[#606C38] rounded-2xl hover:opacity-90 transition shadow-sm"
+                    >
+                      Save patient
+                    </button>
+                  )}
+                </div>
+                {isConfirmingDelete ? (
+                  <button
+                    onClick={handleDeletePatient}
+                    className="py-3 px-4 text-sm font-bold text-white bg-red-600 rounded-2xl hover:opacity-90 transition shadow-sm animate-pulse"
+                  >
+                    Confirm permanent delete
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDeletePatient}
+                    className="py-3 px-4 text-sm font-bold text-[#BC6C25] bg-[#BC6C25]/10 border border-[#BC6C25]/20 rounded-2xl hover:bg-[#BC6C25]/15 transition"
+                  >
+                    Delete patient
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -444,7 +522,7 @@ export default function PatientDetails() {
                 <div className="flex-1">
                   <p className="text-sm font-bold tracking-tight">Active Care Plan</p>
                   <p className="text-xs text-[#606C38] opacity-70 mt-1">
-                    Managing: <span className="font-bold">{patient.designation ? `${patient.designation} ` : ''}{patient.first_name}</span> • DOB: {patient.dob}
+                    Managing: <span className="font-bold">{patientDisplayName}</span> • DOB: {patient.dob || 'Not set'}
                   </p>
                 </div>
               </div>

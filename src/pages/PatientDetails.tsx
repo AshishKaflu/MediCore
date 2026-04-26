@@ -28,6 +28,25 @@ import { fileToOptimizedDataUrl, IMAGE_FILE_ACCEPT } from '../lib/image';
 import { removeImageFromStorage, saveImageWithFallback } from '../lib/storage';
 import { sanitizePatientInput } from '../lib/validation';
 
+function formatMedicationSchedule(med: { schedule_labels?: string; timing?: string }) {
+  const labelMap: Record<string, string> = {
+    before_breakfast: 'Before Breakfast',
+    after_breakfast: 'After Breakfast',
+    lunch: 'Lunch',
+    dinner: 'Dinner',
+  };
+
+  const labels = (med.schedule_labels || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => labelMap[value] || value);
+
+  if (labels.length > 0) return labels.join(', ');
+  if (med.timing) return med.timing.split(',').join(', ');
+  return 'Schedule not set';
+}
+
 export default function PatientDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -642,7 +661,7 @@ export default function PatientDetails() {
                         <div className="flex-1">
                           <h3 className="font-bold text-[#283618] text-lg">{med.name}</h3>
                           <p className="text-xs text-[#606C38] opacity-70 font-semibold">
-                            {med.dosage} • {med.frequency || 'Daily'} {med.timing ? `(${med.timing.split(',').join(', ')})` : ''}
+                            {med.dosage} • {med.frequency || 'Daily'} ({formatMedicationSchedule(med)})
                           </p>
                         </div>
                       </div>

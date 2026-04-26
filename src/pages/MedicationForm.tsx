@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../lib/db';
-import { ChevronLeft, Camera, Trash2, Plus, X } from 'lucide-react';
+import { ChevronLeft, Camera, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateId } from '../lib/id';
 import { useAuthStore } from '../store/authStore';
@@ -11,6 +11,17 @@ import { deleteMedicationCloud, scheduleCaregiverSync } from '../lib/sync';
 import { fileToOptimizedDataUrl, IMAGE_FILE_ACCEPT } from '../lib/image';
 import { removeImageFromStorage, saveImageWithFallback } from '../lib/storage';
 import { sanitizeMedicationInput } from '../lib/validation';
+
+const MEDICATION_SCHEDULE_OPTIONS = [
+  { value: 'before_breakfast', label: 'Before Breakfast', time: '07:00' },
+  { value: 'after_breakfast', label: 'After Breakfast', time: '09:00' },
+  { value: 'lunch', label: 'Lunch', time: '13:00' },
+  { value: 'dinner', label: 'Dinner', time: '19:00' },
+] as const;
+
+const scheduleLabelByValue = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.value, option.label]));
+const scheduleTimeByValue = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.value, option.time]));
+const scheduleValueByTime = new Map<string, string>(MEDICATION_SCHEDULE_OPTIONS.map((option) => [option.time, option.value]));
 
 export default function MedicationForm() {
   const { id: patientId, medId } = useParams();
@@ -24,6 +35,7 @@ export default function MedicationForm() {
   const [type, setType] = useState('tablet');
   const [interval, setIntervalVal] = useState<'daily'|'alternate'|'x_days'>('daily');
   const [intervalDays, setIntervalDays] = useState(3);
+  const [scheduleLabels, setScheduleLabels] = useState<string[]>(['before_breakfast']);
   const [startDate, setStartDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [timings, setTimings] = useState<string[]>(['08:00']);
   const [inventoryCount, setInventoryCount] = useState(30);
@@ -57,7 +69,20 @@ export default function MedicationForm() {
           if (med.interval_days) setIntervalDays(med.interval_days);
           if (med.start_date) setStartDate(med.start_date);
           else if (med.created_at) setStartDate(format(new Date(med.created_at), 'yyyy-MM-dd'));
-          if (med.timing) setTimings(med.timing.split(','));
+          if (med.schedule_labels) {
+            const labels = med.schedule_labels.split(',').map((value) => value.trim()).filter(Boolean);
+            if (labels.length > 0) {
+              setScheduleLabels(labels);
+              setTimings(labels.map((value) => scheduleTimeByValue.get(value) || '08:00'));
+            }
+          } else if (med.timing) {
+            const storedTimings = med.timing.split(',').map((value) => value.trim()).filter(Boolean);
+            setTimings(storedTimings);
+            const inferredLabels = storedTimings
+              .map((time) => scheduleValueByTime.get(time) || '')
+              .filter(Boolean);
+            if (inferredLabels.length > 0) setScheduleLabels(inferredLabels);
+          }
           setInventoryCount(med.inventory_count);
           setRefillReminderAt(med.refill_reminder_at);
           if (med.photo) setPhoto(med.photo);
@@ -81,18 +106,13 @@ export default function MedicationForm() {
     }
   };
 
-  const addTiming = () => {
-    setTimings([...timings, '12:00']);
-  };
+  const toggleScheduleLabel = (value: string) => {
+    const nextLabels = scheduleLabels.includes(value)
+      ? scheduleLabels.filter((label) => label !== value)
+      : [...scheduleLabels, value];
 
-  const removeTiming = (index: number) => {
-    setTimings(timings.filter((_, i) => i !== index));
-  };
-
-  const updateTiming = (index: number, val: string) => {
-    const newTimings = [...timings];
-    newTimings[index] = val;
-    setTimings(newTimings);
+    setScheduleLabels(nextLabels);
+    setTimings(nextLabels.map((label) => scheduleTimeByValue.get(label) || '08:00'));
   };
 
   const handleSave = async () => {
@@ -116,6 +136,7 @@ export default function MedicationForm() {
         interval,
         intervalDays,
         startDate,
+        scheduleLabels,
         timings,
         inventoryCount,
         refillReminderAt,
@@ -137,6 +158,7 @@ export default function MedicationForm() {
         frequency: sanitized.interval === 'daily' ? `${sanitized.timings.length}x daily` : sanitized.interval,
         form: sanitized.type,
         type: sanitized.type,
+        schedule_labels: sanitized.scheduleLabels.join(','),
         timing: sanitized.timings.join(','),
         interval: sanitized.interval,
         interval_days: sanitized.intervalDays,
@@ -317,26 +339,42 @@ export default function MedicationForm() {
           )}
 
           <div>
-            <label className="block text-xs font-bold text-[#606C38] mb-1">Times of Day</label>
-            <div className="space-y-2">
-              {timings.map((time, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input 
-                    type="time" 
-                    value={time} 
-                    onChange={e => updateTiming(idx, e.target.value)}
-                    className="flex-1 text-sm p-3 bg-[#FBFBF8] border border-[#E5E1D8] rounded-xl focus:border-[#606C38] outline-none text-[#283618]" 
-                  />
-                  {timings.length > 1 && (
-                    <button onClick={() => removeTiming(idx)} className="w-10 h-10 bg-[#F2F0E4] text-[#BC6C25] rounded-xl flex items-center justify-center hover:bg-[#E5E1D8]">
-                      <X className="w-5 h-5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button onClick={addTiming} className="w-full flex items-center justify-center gap-1 text-xs font-bold text-[#606C38] py-3 bg-[#F2F0E4] rounded-xl hover:bg-[#E5E1D8] transition">
-                <Plus className="w-4 h-4"/> Add Another Time
-              </button>
+            <label className="block text-xs font-bold text-[#606C38] mb-1">Meal Routine</label>
+            <p className="text-xs text-[#606C38] opacity-70 mb-3">
+              Choose when this medicine should be taken. These options automatically set the schedule used by reminders and tracking.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {MEDICATION_SCHEDULE_OPTIONS.map((option) => {
+                const selected = scheduleLabels.includes(option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggleScheduleLabel(option.value)}
+                    className={`rounded-2xl border px-3 py-3 text-left transition ${
+                      selected
+                        ? 'bg-[#606C38] text-white border-[#606C38] shadow-sm'
+                        : 'bg-[#FBFBF8] text-[#283618] border-[#E5E1D8] hover:bg-[#F2F0E4]'
+                    }`}
+                  >
+                    <p className="text-sm font-bold">{option.label}</p>
+                    <p className={`text-[11px] font-semibold mt-1 ${selected ? 'text-white/80' : 'text-[#606C38] opacity-70'}`}>
+                      Default time {option.time}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 rounded-2xl border border-[#E5E1D8] bg-[#F8F5ED] px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#606C38] opacity-70">Selected schedule</p>
+              <p className="mt-1 text-sm font-bold text-[#283618]">
+                {scheduleLabels.length > 0
+                  ? scheduleLabels.map((value) => scheduleLabelByValue.get(value) || value).join(', ')
+                  : 'Select at least one meal routine'}
+              </p>
+              <p className="mt-1 text-xs text-[#606C38] opacity-75">
+                {timings.length > 0 ? timings.join(', ') : 'No reminder times generated yet'}
+              </p>
             </div>
           </div>
         </div>

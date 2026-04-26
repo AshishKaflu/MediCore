@@ -132,6 +132,7 @@ export function sanitizeMedicationInput(input: {
   interval: Medication['interval'];
   intervalDays: number;
   startDate: string;
+  scheduleLabels: string[];
   timings: string[];
   inventoryCount: number;
   refillReminderAt: number;
@@ -143,6 +144,7 @@ export function sanitizeMedicationInput(input: {
   interval: NonNullable<Medication['interval']>;
   intervalDays?: number;
   startDate: string;
+  scheduleLabels: string[];
   timings: string[];
   inventoryCount: number;
   refillReminderAt: number;
@@ -152,6 +154,7 @@ export function sanitizeMedicationInput(input: {
   const dosage = sanitizeShortText(input.dosage, DOSAGE_MAX_LENGTH);
   const type = sanitizeShortText(input.type, 32) || 'tablet';
   const startDate = input.startDate.trim();
+  const scheduleLabels = input.scheduleLabels.map((label) => sanitizeShortText(label, 32)).filter(Boolean);
   const timings = input.timings.map((time) => time.trim()).filter(Boolean);
   const inventoryCount = Number.isFinite(input.inventoryCount) ? Math.max(0, Math.floor(input.inventoryCount)) : 0;
   const refillReminderAt = Number.isFinite(input.refillReminderAt) ? Math.max(0, Math.floor(input.refillReminderAt)) : 0;
@@ -189,6 +192,7 @@ export function sanitizeMedicationInput(input: {
     interval: input.interval || 'daily',
     intervalDays: input.interval === 'x_days' ? intervalDays : undefined,
     startDate,
+    scheduleLabels,
     timings,
     inventoryCount,
     refillReminderAt,
@@ -242,6 +246,7 @@ export function sanitizeImportedMedication(medication: Partial<Medication>): Med
       interval: medication.interval || 'daily',
       intervalDays: medication.interval_days || 1,
       startDate: medication.start_date || new Date().toISOString().slice(0, 10),
+      scheduleLabels: (medication.schedule_labels || '').split(','),
       timings: (medication.timing || '08:00').split(','),
       inventoryCount: medication.inventory_count ?? 0,
       refillReminderAt: medication.refill_reminder_at ?? 0,
@@ -258,6 +263,7 @@ export function sanitizeImportedMedication(medication: Partial<Medication>): Med
         (sanitized.interval === 'daily' ? `${sanitized.timings.length}x daily` : sanitized.interval),
       form: sanitized.type,
       type: sanitized.type,
+      schedule_labels: sanitized.scheduleLabels.join(','),
       timing: sanitized.timings.join(','),
       interval: sanitized.interval,
       interval_days: sanitized.intervalDays,

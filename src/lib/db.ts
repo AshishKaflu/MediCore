@@ -22,6 +22,7 @@ export interface Medication {
   frequency: string; // Legacy, keep for compatibility or just keep around
   form?: string; // Legacy cloud schema compatibility
   type?: string; // 'tablet', 'liquid', 'injection', etc.
+  schedule_labels?: string; // comma-joined routine labels like 'before_breakfast,dinner'
   timing?: string; // comma-joined times, e.g., '08:00,20:00'
   interval?: 'daily' | 'alternate' | 'x_days'; 
   interval_days?: number; // used if interval === 'x_days'

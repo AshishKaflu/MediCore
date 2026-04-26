@@ -154,6 +154,7 @@ CREATE TABLE IF NOT EXISTS public.medications (
   frequency TEXT DEFAULT '',
   type TEXT,
   form TEXT,
+  schedule_labels TEXT DEFAULT '',
   timing TEXT,
   interval TEXT,
   interval_days INTEGER,
@@ -170,6 +171,7 @@ ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS dosage TEXT DEFAULT '';
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS frequency TEXT DEFAULT '';
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS type TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS form TEXT;
+ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS schedule_labels TEXT DEFAULT '';
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS timing TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS interval TEXT;
 ALTER TABLE public.medications ADD COLUMN IF NOT EXISTS interval_days INTEGER;

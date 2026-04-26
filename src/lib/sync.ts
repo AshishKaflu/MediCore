@@ -27,7 +27,7 @@ const LOG_BATCH_SIZE = 25;
 const MAX_SYNCED_PHOTO_LENGTH = 200_000;
 const PATIENT_SELECT_COLUMNS = 'id,caregiver_id,first_name,last_name,dob,notes,status,pin,designation,photo,created_at';
 const MEDICATION_SELECT_COLUMNS =
-  'id,patient_id,name,dosage,frequency,type,form,timing,interval,interval_days,start_date,photo,inventory_count,refill_reminder_at,created_at';
+  'id,patient_id,name,dosage,frequency,type,form,schedule_labels,timing,interval,interval_days,start_date,photo,inventory_count,refill_reminder_at,created_at';
 const MEDICATION_LOG_SELECT_COLUMNS = 'id,medication_id,patient_id,status,taken_at,notes';
 
 const isUuid = (value: string): boolean =>
@@ -198,6 +198,7 @@ function sanitizeMedicationForCloud(medication: Medication) {
     frequency: medication.frequency ?? '',
     type: normalizedType,
     form: normalizedType,
+    schedule_labels: medication.schedule_labels ?? null,
     timing: medication.timing ?? null,
     interval: medication.interval ?? null,
     interval_days: medication.interval_days ?? null,

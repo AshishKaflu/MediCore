@@ -277,17 +277,23 @@ export default function PatientDashboard() {
        iconBgClass = "bg-[#BC6C25]/20 text-[#BC6C25]";
     }
 
+    const scheduleBadgeClass = isCompleted
+      ? 'bg-[#606C38]/10 text-[#606C38] border-[#606C38]/20'
+      : isOverdue
+        ? 'bg-[#BC6C25]/10 text-[#BC6C25] border-[#BC6C25]/20'
+        : 'bg-[#F2F0E4] text-[#606C38] border-[#E5E1D8]';
+
     return (
       <motion.div
         key={med.id}
         layout
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`rounded-3xl p-4 shadow-sm border ${containerClass}`}
+        className={`rounded-[28px] p-4 shadow-sm border ${containerClass}`}
       >
-        <div className="flex flex-col gap-2.5">
-          <div className="flex items-start gap-3.5">
-            <div className={`shrink-0 w-12 h-12 rounded-full flex items-center justify-center mt-1 overflow-hidden ${iconBgClass}`}>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className={`shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center mt-0.5 overflow-hidden ${iconBgClass}`}>
               {med.photo ? (
                 <button
                   type="button"
@@ -310,68 +316,78 @@ export default function PatientDashboard() {
                   <h3 className={`font-bold text-[15px] leading-5 truncate ${titleClass}`}>
                     {med.name}
                   </h3>
-                  <p className="text-[12px] text-[#606C38] opacity-80 font-bold truncate">
+                  <p className="text-[12px] text-[#606C38] opacity-80 font-bold truncate mt-1">
                     {med.dosage}{med.type ? ` • ${med.type}` : ''}
                   </p>
-                  {med.scheduleLabel ? (
-                    <div className="mt-2 inline-flex items-center rounded-full bg-[#F2F0E4] border border-[#E5E1D8] px-2.5 py-1 text-[11px] font-bold text-[#606C38]">
-                      {formatScheduleLabel(med.scheduleLabel)}
-                    </div>
-                  ) : null}
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="flex items-center justify-end gap-1 text-[12px] font-bold text-[#606C38] opacity-80">
                     <Clock className="w-3.5 h-3.5" /> {formatScheduleTime(med.time)}
                   </div>
-	                  {isCompleted ? (
-	                    <div className="text-[11px] font-bold text-[#606C38] opacity-60">
-	                      {med.takenAt ? `Taken ${format(new Date(med.takenAt), 'h:mm a')}` : 'Taken'}
-	                    </div>
-	                  ) : (
-	                    isViewingToday ? (
-	                      <div className={`text-[11px] font-bold ${isOverdue ? 'text-[#BC6C25]' : 'text-[#606C38]'}`}>
-	                        {getRelativeTime(med.time, isOverdue)}
-	                      </div>
-	                    ) : (
-	                      <div className="text-[11px] font-bold text-[#606C38] opacity-60">Scheduled</div>
-	                    )
-	                  )}
+                  {isCompleted ? (
+                    <div className="text-[11px] font-bold text-[#606C38] opacity-60 mt-1">
+                      {med.takenAt ? `Taken ${format(new Date(med.takenAt), 'h:mm a')}` : 'Taken'}
+                    </div>
+                  ) : (
+                    isViewingToday ? (
+                      <div className={`text-[11px] font-bold mt-1 ${isOverdue ? 'text-[#BC6C25]' : 'text-[#606C38]'}`}>
+                        {getRelativeTime(med.time, isOverdue)}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] font-bold text-[#606C38] opacity-60 mt-1">Scheduled</div>
+                    )
+                  )}
                 </div>
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className={`rounded-2xl border px-3 py-3 ${scheduleBadgeClass}`}>
+              <p className="text-[10px] font-bold uppercase tracking-wider opacity-70">Meal timing</p>
+              <p className="mt-1 text-sm font-bold">
+                {med.scheduleLabel ? formatScheduleLabel(med.scheduleLabel) : 'Scheduled dose'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-[#E5E1D8] bg-[#FBFBF8] px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#606C38] opacity-70">Today status</p>
+              <p className={`mt-1 text-sm font-bold ${isOverdue ? 'text-[#BC6C25]' : 'text-[#283618]'}`}>
+                {isCompleted ? 'Completed' : isOverdue ? 'Needs attention' : 'Upcoming'}
+              </p>
+            </div>
+          </div>
           
-	          <div className="flex justify-end border-t border-[#E5E1D8]/50 pt-3">
-	            {med.status === 'pending' ? (
-	              <button 
-	                onClick={() => handleTakeMed(med)}
-	                disabled={!isViewingToday}
-	                className={`px-5 py-2 text-[13px] font-bold rounded-xl shadow-sm transition w-full sm:w-auto ${
-	                  isViewingToday ? 'bg-[#BC6C25] text-white hover:opacity-90' : 'bg-[#E5E1D8] text-[#606C38] opacity-70 cursor-not-allowed'
-	                }`}
-	              >
-	                Mark Taken
-	              </button>
-	            ) : (
-	              <div className="flex items-center justify-between w-full">
+          <div className="flex justify-end border-t border-[#E5E1D8]/50 pt-3">
+            {med.status === 'pending' ? (
+              <button 
+                onClick={() => handleTakeMed(med)}
+                disabled={!isViewingToday}
+                className={`px-5 py-2 text-[13px] font-bold rounded-xl shadow-sm transition w-full sm:w-auto ${
+                  isViewingToday ? 'bg-[#BC6C25] text-white hover:opacity-90' : 'bg-[#E5E1D8] text-[#606C38] opacity-70 cursor-not-allowed'
+                }`}
+              >
+                Mark Taken
+              </button>
+            ) : (
+              <div className="flex items-center justify-between w-full">
                 <div className="flex items-center gap-1.5 text-sm font-bold text-[#606C38]">
                   <CheckCircle2 className="w-4 h-4" />
                   COMPLETED
                 </div>
-	                <button 
-	                   onClick={() => handleUndoMed(med)}
-	                   disabled={!isViewingToday}
-	                   className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
-	                     isViewingToday
-	                       ? 'text-[#DDA15E] hover:text-[#BC6C25] cursor-pointer bg-[#BC6C25]/10'
-	                       : 'text-[#606C38] opacity-60 cursor-not-allowed bg-[#E5E1D8]'
-	                   }`}
-	                >
-	                   <RotateCcw className="w-3.5 h-3.5" /> Undo Action
-	                </button>
-	              </div>
-	            )}
-	          </div>
+                <button 
+                   onClick={() => handleUndoMed(med)}
+                   disabled={!isViewingToday}
+                   className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition ${
+                     isViewingToday
+                       ? 'text-[#DDA15E] hover:text-[#BC6C25] cursor-pointer bg-[#BC6C25]/10'
+                       : 'text-[#606C38] opacity-60 cursor-not-allowed bg-[#E5E1D8]'
+                   }`}
+                >
+                   <RotateCcw className="w-3.5 h-3.5" /> Undo Action
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </motion.div>
     );

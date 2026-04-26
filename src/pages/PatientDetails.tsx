@@ -567,31 +567,52 @@ export default function PatientDetails() {
                     Back to Dashboard
                   </button>
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-[#F7F4EB] border border-[#E5E1D8] p-3 mb-4">
+                  <p className="text-xs font-semibold text-[#606C38] opacity-75">
+                    Quick actions for managing this patient record.
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={handleEnterEditMode}
-                    className="flex items-center justify-center gap-2 py-3 text-white bg-[#606C38] rounded-2xl font-bold hover:opacity-90 transition shadow-sm"
+                    className="flex flex-col items-center gap-1.5 text-[#606C38] hover:text-[#283618] transition"
                   >
-                    <Edit2 className="w-4 h-4" />
-                    Edit Details
+                    <div className="w-10 h-10 rounded-full bg-[#F2F0E4] flex items-center justify-center border border-[#E5E1D8]">
+                      <Edit2 className="w-4 h-4" />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Edit</span>
                   </button>
                   <button
                     onClick={handleArchivePatient}
-                    className="flex items-center justify-center gap-2 py-3 bg-[#DDA15E]/10 text-[#BC6C25] border border-[#DDA15E]/30 rounded-2xl font-bold hover:bg-[#DDA15E]/20 transition"
+                    className="flex flex-col items-center gap-1.5 text-[#BC6C25] hover:text-[#9A5A1E] transition"
                   >
-                    <Archive className="w-4 h-4" />
-                    {patient.status === 'archived' ? 'Restore Patient' : 'Archive Patient'}
+                    <div className="w-10 h-10 rounded-full bg-[#DDA15E]/10 border border-[#DDA15E]/30 flex items-center justify-center">
+                      <Archive className="w-4 h-4" />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider">
+                      {patient.status === 'archived' ? 'Restore' : 'Archive'}
+                    </span>
                   </button>
                   <button
                     onClick={handleDeletePatient}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-2xl font-bold transition border ${
+                    className={`flex flex-col items-center gap-1.5 transition ${
                       isConfirmingDelete
-                        ? 'bg-red-600 text-white border-red-600 animate-pulse'
-                        : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                        ? 'text-white'
+                        : 'text-red-700 hover:text-red-800'
                     }`}
                   >
-                    <Trash2 className="w-4 h-4" />
-                    {isConfirmingDelete ? 'Tap Again To Delete' : 'Delete Patient'}
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center border ${
+                        isConfirmingDelete
+                          ? 'bg-red-600 border-red-600 animate-pulse'
+                          : 'bg-red-50 border-red-200'
+                      }`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-center">
+                      {isConfirmingDelete ? 'Confirm Delete' : 'Delete'}
+                    </span>
                   </button>
                 </div>
               </div>
